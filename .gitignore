@@ -1,5 +1,7 @@
 # Prerequisites
 *.d
+makefile
+.vscode/
 
 # Object files
 *.o
@@ -11,10 +13,6 @@
 *.ilk
 *.map
 *.exp
-
-# Precompiled Headers
-*.gch
-*.pch
 
 # Libraries
 *.lib
@@ -41,15 +39,3 @@
 *.su
 *.idb
 *.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo

@@ -38,15 +38,6 @@ int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo) {
     return result;
 }
 
-#ifdef _WIN32
-
-int fs_path_abs(const char *path, char *out) {    
-    if (!path || !out) return -1;
-
-    DWORD len = GetFullPathName(path, PATH_MAX, out, NULL);
-    return (len > 0 && len < PATH_MAX) ? 0 : -1;
-}
-
 int _rem_trailing_slashes(char *c) {
     if (strlen(c) == 0) return 1;
     char *p = c + strlen(c) - 1;
@@ -58,6 +49,15 @@ int _rem_trailing_slashes(char *c) {
 
     *(p + 1) = '\0';
     return 0; 
+}
+
+#ifdef _WIN32
+
+int fs_path_abs(const char *path, char *out) {    
+    if (!path || !out) return -1;
+
+    DWORD len = GetFullPathName(path, PATH_MAX, out, NULL);
+    return (len > 0 && len < PATH_MAX) ? 0 : -1;
 }
 
 int fs_path_dirname(const char* path, char *out) {
@@ -148,25 +148,22 @@ int fs_path_abs(const char *path, char *out) {
 int fs_path_dirname(const char* path, char *out) {
     if (!path || !out) return -1;
 
-    strcpy(out, path);
-    char *slash = strrchr(out, '/');
-    if (slash && slash != out) {
-        *slash = '\0';
-        return 0;
-    }
-    else {
-        strcpy(out, "/");
-        return 1;
-    }
+    char *path_copy = strdup(path);
+    char *res = dirname(path_copy);
+    strcpy(out, res);
+    free(path_copy);
+
+    return path[0] == '\0' || strcmp(path, "/") == 0;
 }
 
 int fs_path_basename(const char* path, char *out) {
     if (!path || !out) return -1;
-    
-    const char *slash = strrchr(out, '/');
-    const char *base = slash ? slash + 1 : path;
 
-    strcpy(out, base);
+    char *path_copy = strdup(path);
+    char *res = basename(path_copy);
+    strcpy(out, res);
+    free(path_copy);
+
     return 0;
 }
 

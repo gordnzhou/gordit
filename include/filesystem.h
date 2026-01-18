@@ -1,20 +1,12 @@
-#ifndef GIT_FILE
-#define GIT_FILE
+#ifndef FILESYSTEM_H
+#define FILESYSTEM_H
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
-#include <unistd.h>
     
 #ifndef PATH_MAX
     #define PATH_MAX 4096
 #endif
-
-#define u32 unsigned int
-#define u16 unsigned short
 
 #define fs_fopen fopen
 #define fs_fclose fclose
@@ -33,17 +25,17 @@
 
 struct fs_fileinfo {
     long long fi_size;
-    u32 fi_mode;
+    unsigned int fi_mode;
     time_t fi_atime;
     time_t fi_mtime;
     time_t fi_ctime;
     dev_t fi_dev;
     ino_t fi_ino;
-    u32 fi_uid;
-    u32 fi_gid;
+    unsigned int fi_uid;
+    unsigned int fi_gid;
 };
 
-DIR * fs_opendir(char *);
+DIR * fs_opendir(const char *);
 
 int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
 
@@ -64,5 +56,8 @@ int fs_path_basename(const char* path, char* out);
 // @param path2 a file OR folder path (rel or abs)
 // @return 0 on success, -1 if any errors.
 int fs_path_join(const char *path1, const char *path2, char *out);
+
+// @return 1 if path exists, 0 otherwise
+int fs_file_exists(const char *);
 
 #endif

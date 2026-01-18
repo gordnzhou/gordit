@@ -1,11 +1,7 @@
 # gordit
 Git implementation in C
 
-Deps
-- Openssl
-- libuv
-
-## Notes
+# Notes
 1. git init creates .git folder with proper base folders and files
 1. take repo directory and convert to objects in git/objects, and reconstruct repo from those objects
     - blob = "blob <size>\0<file contents>" <-- SHA is hash of this

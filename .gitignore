@@ -3,6 +3,7 @@
 makefile
 .vscode/
 build/ 
+.gordit
 
 # Object files
 *.o

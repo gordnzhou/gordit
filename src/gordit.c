@@ -7,42 +7,74 @@
 #include <zlib.h>
 
 #include "filesystem.h"
+#include "objects.h" 
 
-#define GIT_FOLDER_NAME ".gordit"
 
-int git_init_repo(char *root_folder);
-int git_find_root(char *path, char *repo_root);
+#define GIT_FOLDER  ".gordit"
+#define REFS_NAME "refs"
+#define OBJS_NAME "objects"
+#define HEAD_NAME "HEAD"
 
-int git_init_repo(char *root_folder) {
-    (void)root_folder;
+// If git folder exists in cwd do nothing.
+// Otherwise create git folder in cwd, including subfolders, index and HEAD.
+// @returns 0 on success, 1 if git folder already in cwd, -1 otherwise. 
+int git_init_repo() {
+    char cwd[PATH_MAX];
+
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        perror("getcwd() error");
+        return -1;
+    }
+
+    char head_path[PATH_MAX];
+    if (fs_path_join(cwd, ".gordit/HEAD", head_path) == -1) {
+        return -1;
+    }
+
+    if (fs_file_exists(head_path) == 1) {
+        return 1;
+    }
+
+    mkdir(".gordit");
+    mkdir(".gordit/refs");
+    mkdir(".gordit/objects");
+
+    FILE *f_ptr;
+    f_ptr = fs_fopen(".gordit/HEAD", "w");
+    fs_fclose(f_ptr);
+    f_ptr = fs_fopen(".gordit/index", "w");
+    fs_fclose(f_ptr);
+   
     return 0;
 }
 
+// Walks up `path` until it finds a directory with git folder. Fills `repo_root` with that directory path. 
+// @returns 1 on successful find and 0 if unsuccessful.
 int git_find_root(char *path, char *repo_root) {
     char path_copy[PATH_MAX];
     strcpy(path_copy, path);
 
     DIR *dir;
     if ((dir = fs_opendir(path_copy)) == NULL) {
-        printf("Could not open file: %s\n", path);
-        return 1;
+        return 0;
     }
 
-    printf("files in %s:\n", path);
     struct dirent *ent;
     while ((ent = fs_readdir(dir)) != NULL) {
-        printf("%s\n", ent->d_name);
+        if (strcmp(ent->d_name, GIT_FOLDER) == 0) {
+            strcpy(path, repo_root);
+            return 1;
+        }
     }
 
     fs_closedir(dir);
 
     char parent[PATH_MAX];
-    if (fs_path_dirname(path, parent) == 0) {
-        git_find_root(parent, repo_root);
+    if (fs_path_dirname(path, parent) != 0) {
+        return 0;
     }
 
-    (void)repo_root;
-    return 0;
+    return git_find_root(parent, repo_root);
 }
 
 int main(int argc, char* argv[]) {
@@ -54,17 +86,22 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (git_find_root(cwd, repo_root) == 0) {
-        perror("fatal: already in a repository");
-        return 1;
+    if (git_find_root(cwd, repo_root)) {
+        printf("In a repository with its root path: %s\n", repo_root);
+    } else {
+        printf("Not in a repository.\n");
     }
 
-    if (git_init_repo(cwd)) {
+    int res = git_init_repo();
+    if (res == -1) {
         perror("could not initalize repository");
-        return 1;
+        return 0;
+    } else if (res == 1) {
+        printf("Repository already exists at current working directory.\n");
+        return 0;
+    } else {
+        printf("Initalized empty repository in current working directory.");
     }
-
-    printf("Initalized empty repository in %s\n", cwd);
 
     (void)argc;
     (void)argv;

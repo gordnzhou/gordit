@@ -13,10 +13,15 @@
     #include <windows.h>
 #endif
 
-DIR *fs_opendir(char *path) {
+DIR *fs_opendir(const char *path) {
 #ifdef _WIN32
+    char copy[PATH_MAX];
+    strcpy(copy, path);
+
     char temp[2] = {'\\', '\0'};
-    strncat(path, temp, 1);
+    strncat(copy, temp, 1);
+
+    path = copy;
 #endif
     return opendir(path); 
 }
@@ -180,5 +185,14 @@ int fs_path_join(const char *path1, const char *path2, char *out) {
 
     return 0;
 }
-
 #endif
+
+int fs_file_exists(const char *filename) {
+    FILE *file;
+    if ((file = fopen(filename, "r")) != NULL) {
+        fclose(file);
+        return 1;
+    } else {
+        return 0;
+    }
+}

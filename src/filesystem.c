@@ -13,6 +13,15 @@
     #include <windows.h>
 #endif
 
+int fs_mkdir(const char *path, mode_t mode) {
+#ifdef _WIN32
+    return mkdir(path);
+    (void)mode;
+#else
+    return mkdir(path, mode);
+#endif
+}
+
 DIR *fs_opendir(const char *path) {
 #ifdef _WIN32
     char copy[PATH_MAX];
@@ -66,8 +75,6 @@ int fs_path_abs(const char *path, char *out) {
 }
 
 int fs_path_dirname(const char* path, char *out) {
-    if (!path || !out) return -1;
-
     strcpy(out, path);
     // path is empty or all slashes 
     if (_rem_trailing_slashes(out) == 1) {
@@ -98,14 +105,12 @@ int fs_path_dirname(const char* path, char *out) {
     return 0;
 }
 
-int fs_path_basename(const char* path, char *out) {
-    if (!path || !out) return -1;
-
+void fs_path_basename(const char* path, char *out) {
     strcpy(out, path);
     // path is empty or all slashes 
     if (_rem_trailing_slashes(out) == 1) {
         out[1] = '\0';
-        return 0;
+        return;
     }
     
     const char *start = path;
@@ -118,15 +123,13 @@ int fs_path_basename(const char* path, char *out) {
         strcpy(out, start);
     }
 
-    return 0;
+    return;
 }
 
-int fs_path_join(const char *path1, const char *path2, char *out) {
-    if (!path1 || !path2 || !out) return -1;
-
+void fs_path_join(const char *path1, const char *path2, char *out) {
     size_t len1 = strlen(path1);
     size_t len2 = strlen(path2);
-    if (len1 + len2 + 2 > PATH_MAX) return -1;
+    assert(len1 + len2 + 2 <= PATH_MAX);
 
     strncpy(out, path1, PATH_MAX);
     out[PATH_MAX - 1] = '\0';
@@ -138,8 +141,6 @@ int fs_path_join(const char *path1, const char *path2, char *out) {
     if (*p2 == '\\' || *p2 == '/') p2++;
 
     strncat(out, p2, PATH_MAX - strlen(out) - 1);
-
-    return 0;
 }
 
 #else
@@ -151,8 +152,6 @@ int fs_path_abs(const char *path, char *out) {
 }
 
 int fs_path_dirname(const char* path, char *out) {
-    if (!path || !out) return -1;
-
     char *path_copy = strdup(path);
     char *res = dirname(path_copy);
     strcpy(out, res);
@@ -161,29 +160,23 @@ int fs_path_dirname(const char* path, char *out) {
     return path[0] == '\0' || strcmp(path, "/") == 0;
 }
 
-int fs_path_basename(const char* path, char *out) {
-    if (!path || !out) return -1;
-
+void fs_path_basename(const char* path, char *out) {
     char *path_copy = strdup(path);
     char *res = basename(path_copy);
     strcpy(out, res);
     free(path_copy);
 
-    return 0;
+    return;
 }
 
-int fs_path_join(const char *path1, const char *path2, char *out) {
-    if (!path1 || !path2 || !out) return -1;
-
+void fs_path_join(const char *path1, const char *path2, char *out) {
     size_t len1 = strlen(path1);
     size_t len2 = strlen(path2);
-    if (len1 + len2 + 2 > PATH_MAX) return -1;
+    assert(len1 + len2 + 2 > PATH_MAX);
 
     strcpy(out, path1);
     if (len1 > 0 && out[len1 - 1] != '/') strcat(out, "/");
     strcat(out, path2);
-
-    return 0;
 }
 #endif
 

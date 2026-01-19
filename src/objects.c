@@ -1,27 +1,124 @@
-#include <objects.h>
+#include <string.h>
+#include <stdio.h>
+#include <openssl/sha.h>
 
-struct git_obj_blob *create_blob(const char *filepath);
+#include "global.h"
+#include "filesystem.h"
+#include "objects.h"
 
-int write_blob_to_disk(const struct git_obj_blob *, const char *repo_root);
+git_obj_blob *create_blob(const char *filepath) {
+    fs_fileinfo fileinfo;
+    FILE *fptr;
 
-struct git_obj_blob *read_blob_from_disk(char hash[HASH_SIZE], const char *repo_root);
+    if (fs_getinfo(filepath, &fileinfo) == -1) {
+        return NULL;
+    }
 
-int create_file_from_blob(const char *path, const struct git_obj_blob *);
+    if ((fptr = fopen(filepath, "rb")) == NULL) {
+        return NULL;
+    }
 
-void free_blob(struct git_obj_blob *);
+    char header[256];
+    snprintf(header, 256, "%s %llu", O_TYPE_BLOB, fileinfo.fi_size);
+    size_t header_len = strlen(header);
 
-struct git_obj_tree *create_tree(const char *folderpath);
+    git_obj_blob *blob = malloc(sizeof(*blob));
+    blob->type = O_TYPE_BLOB;
+    blob->mode = fileinfo.fi_mode;
+    blob->size = fileinfo.fi_size;
+    blob->name = malloc(PATH_MAX );
+    blob->data = malloc(header_len + fileinfo.fi_size + 1);
 
-int write_tree_to_disk(const struct git_obj_tree *, const char *repo_root);
+    fs_path_basename(filepath, blob->name);
 
-struct git_obj_tree *read_tree_from_disk(char hash[HASH_SIZE]);
+    strcpy(blob->data, header);
 
-int tree_find(const struct git_obj_tree *, char hash[HASH_SIZE], struct git_obj_tree_entry *obj, char *path);
+    // start reading data at next byte AFTER null terminator of header 
+    size_t read = fs_readbytes(blob->data + header_len + 1, 1, blob->size, fptr);
+    if (read != blob->size) {
+        free(blob->data);
+        free(blob->name);
+        free(blob);
+        fclose(fptr);
+        return NULL;
+    }
 
-struct git_obj_blob **tree_get_blobs(struct git_obj_tree *, char *regex_filter, int *size);
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(blob->data, header_len + blob->size + 1, hash);
+    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        sprintf(blob->hash + i * 2, "%02x", hash[i]);
+    } 
 
-void free_tree(struct git_obj_tree *);
+    printf("HASH: %s\n", blob->hash);
 
-int delete_obj_from_disk(char obj_hash[HASH_SIZE], const char *repo_root);
+    return blob;
+}
 
-int get_obj_contents(char obj_hash[HASH_SIZE], const char *repo_root, char *buf, int buf_size);
+int write_blob_to_disk(const git_obj_blob *blob) {
+    (void)blob;
+
+    return 0;
+}
+
+git_obj_blob *read_blob_from_disk(obj_hash hash) {
+    (void)hash;
+    return NULL;
+}
+
+int create_file_from_blob(const char *path, const git_obj_blob *blob) {
+    (void)path;
+    (void)blob;
+    return 0;
+}
+
+void free_blob(git_obj_blob *blob) {
+    free(blob->data);
+    free(blob->name);
+    free(blob);
+}
+
+git_obj_tree *create_tree(const char *folderpath) {
+    (void)folderpath;
+    return NULL;
+}
+
+int write_tree_to_disk(const git_obj_tree *tree) {
+    (void)tree;
+    return 0;
+}
+
+git_obj_tree *read_tree_from_disk(obj_hash hash) {
+    (void)hash;
+    return NULL;
+}
+
+int tree_find(const git_obj_tree *tree, obj_hash hash, git_obj_tree_entry *obj, char *path) {
+    (void)tree;
+    (void)hash;
+    (void)obj;
+    (void)path;
+    return 0;
+}
+
+git_obj_blob **tree_get_blobs(git_obj_tree *tree, char *regex_filter, int *size) {
+    (void)tree;
+    (void)regex_filter;
+    (void)size;
+    return NULL;
+}
+
+void free_tree(git_obj_tree *tree) {
+    (void)tree;
+}
+
+int delete_obj_from_disk(obj_hash hash) {
+    (void)hash;
+    return 0;
+}
+
+int get_obj_contents(obj_hash hash, char *buf, int buf_size) {
+    (void)hash;
+    (void)buf;
+    (void)buf_size;
+    return 0;
+}

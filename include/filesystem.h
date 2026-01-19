@@ -1,6 +1,9 @@
 #ifndef FILESYSTEM_H
 #define FILESYSTEM_H
 
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <dirent.h>
     
@@ -19,12 +22,11 @@
 #define fs_writeline fputs
 
 #define fs_getcwd getcwd
-#define fs_mkdir mkdir
 #define fs_readdir readdir
 #define fs_closedir closedir
 
-struct fs_fileinfo {
-    long long fi_size;
+typedef struct fs_fileinfo {
+    size_t fi_size;
     unsigned int fi_mode;
     time_t fi_atime;
     time_t fi_mtime;
@@ -33,10 +35,14 @@ struct fs_fileinfo {
     ino_t fi_ino;
     unsigned int fi_uid;
     unsigned int fi_gid;
-};
+} fs_fileinfo;
+
+int fs_mkdir(const char *, mode_t);
 
 DIR * fs_opendir(const char *);
 
+// Same as `stat()` function in POSIX 
+// @return 0 on success, -1 if any errors
 int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
 
 // @brief Gets path in absolute form.  
@@ -44,18 +50,16 @@ int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
 int fs_path_abs(const char *path, char *out);
 
 // @brief Gets directory component of path, removing any trailing slashes.
-// @return 0 on success, 1 no directory component, -1 if any errors.
+// @return 0 on success, 1 if path has no directory component
 int fs_path_dirname(const char* path, char* out);
 
 // @brief Gets final component of path (name of rightmost file or folder).
-// @return 0 on success, -1 if any errors.
-int fs_path_basename(const char* path, char* out);
+void fs_path_basename(const char* path, char* out);
 
 // @brief Joins two paths together.
 // @param path1 a folder path (rel or abs)
 // @param path2 a file OR folder path (rel or abs)
-// @return 0 on success, -1 if any errors.
-int fs_path_join(const char *path1, const char *path2, char *out);
+void fs_path_join(const char *path1, const char *path2, char *out);
 
 // @return 1 if path exists, 0 otherwise
 int fs_file_exists(const char *);

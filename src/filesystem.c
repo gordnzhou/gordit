@@ -23,16 +23,40 @@ int fs_mkdir(const char *path, mode_t mode) {
 }
 
 DIR *fs_opendir(const char *path) {
-#ifdef _WIN32
     char copy[PATH_MAX];
     strcpy(copy, path);
 
+#ifdef _WIN32
     char temp[2] = {'\\', '\0'};
     strncat(copy, temp, 1);
-
-    path = copy;
 #endif
-    return opendir(path); 
+
+    return opendir(copy); 
+}
+
+fs_dirent *fs_readdir(DIR *dir) {
+    static fs_dirent ret;
+    static struct stat st;
+
+    struct dirent *ent;
+    if ((ent = readdir(dir)) == NULL) {
+        return NULL;
+    }
+
+    char path[PATH_MAX], temp[PATH_MAX];
+    assert(fs_path_dirname(dir->dd_name, temp) == 0);
+    fs_path_join(temp, ent->d_name, path);
+
+    if (stat(path, &st) != 0) {
+        return NULL;
+    }
+
+    ret.de_ino = ent->d_ino;
+    strncpy(ret.de_path, path, PATH_MAX);
+    strncpy(ret.de_name, ent->d_name, PATH_MAX);
+    ret.de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;
+
+    return &ret;
 }
 
 int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo) {

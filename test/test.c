@@ -102,18 +102,17 @@ void test_objects() {
 
     blob = create_blob(path);
     assert(blob != NULL);
-    ASSERT_STREQ(blob->name, "notes.md")
     hash = blob->hash;
+    printf("hash of blob: %s\n", hash);
 
     assert(write_blob_to_disk(blob) == 0);
     
     blob2 = read_blob_from_disk(hash);
     assert(blob2 != NULL);
     ASSERT_STREQ(blob2->hash, hash)
-    ASSERT_STREQ(blob2->name, blob->name)
     assert(blob2->size == blob->size);
 
-    assert(create_file_from_blob("build/", blob2) == 0);
+    assert(create_file_from_blob("build/notes.md", blob2) == 0);
     assert(fs_file_exists("build/notes.md") == 1);
     printf("================BLOB TESTS PASSED=============\n");
 
@@ -123,7 +122,6 @@ void test_objects() {
     tree = create_tree(path2);
     assert(tree != NULL);
     assert(tree->num_entries == 3); // change this
-    ASSERT_STREQ(tree->name, "include");
 
     free_blob(blob);
     free_blob(blob2);

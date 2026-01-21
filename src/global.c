@@ -1,6 +1,8 @@
 #include <string.h>
 #include <stdio.h>
+
 #include "filesystem.h"
+#include "objects.h"
 #include "global.h"
 
 #define GIT_FOLDER  ".gordit"
@@ -14,22 +16,19 @@ static repo REPO;
 // Walks up `path` until it finds a directory with git folder. Fills `repo_root` with that directory path. 
 // @returns 1 on successful find and 0 if unsuccessful.
 int git_find_root(char *path, char *repo_root) {
-    char path_copy[PATH_MAX];
-    strcpy(path_copy, path);
-
     DIR *dir;
-    if ((dir = fs_opendir(path_copy)) == NULL) {
+    if ((dir = fs_opendir(path)) == NULL) {
         return 0;
     }
 
-    struct dirent *ent;
+    fs_dirent *ent;
     while ((ent = fs_readdir(dir)) != NULL) {
-        if (strcmp(ent->d_name, GIT_FOLDER) == 0) {
+        if (strcmp(ent->de_name, GIT_FOLDER) == 0) {
             strcpy(repo_root, path);
+            fs_closedir(dir);
             return 1;
         }
     }
-
     fs_closedir(dir);
 
     char parent[PATH_MAX];
@@ -64,7 +63,7 @@ int get_working_repo() {
     return 0;
 }
 
-void hash_to_path(char hash[HASH_SIZE], char *out) {
+void hash_to_path(const obj_hash hash, char *out) {
     char path2[HASH_SIZE + 1];
 
     for (size_t i = HASH_SIZE + 1; i > 2; --i) {

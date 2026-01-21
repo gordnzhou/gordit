@@ -15,10 +15,8 @@ typedef char obj_hash[HASH_SIZE + 1];
 typedef struct git_obj_blob {
     obj_hash hash;
     char *type;
-    unsigned int mode;
-    char *name;
-    size_t size; // size of data, NOT including header
-    void *data; 
+    size_t size; // size of data, including header
+    unsigned char *data; 
 } git_obj_blob;
 
 // Inits blob struct representing `filepath`.
@@ -33,17 +31,18 @@ int write_blob_to_disk(const struct git_obj_blob *);
 // @return pointer to blob or NULL if could not read file.
 struct git_obj_blob *read_blob_from_disk(obj_hash hash);
 
-// Transform blob object to its original file and saves it as a file.
-// @return 0 if successful, -1 otherwise.
-int create_file_from_blob(const char *path, const struct git_obj_blob *);
+// Transform blob object to its original file and saves it to `filepath`.
+// Assumes directory already exists
+// @return 0 if successful, -1 if folder doesnt exist or other errors.
+int create_file_from_blob(const char *filepath, const struct git_obj_blob *);
 
 void free_blob(struct git_obj_blob *);
 
 typedef struct git_obj_tree {
     obj_hash hash;
     char *type;
-    unsigned int mode;
-    char *name;
+    size_t size;
+    unsigned char *data;
     int num_entries;
     struct git_obj_tree_entry **entries; // sorted alphabetically by name
 } git_obj_tree;
@@ -51,7 +50,8 @@ typedef struct git_obj_tree {
 typedef struct git_obj_tree_entry {
     struct git_obj_tree *tree;
     struct git_obj_blob *blob;
-    char *type;
+    char name[PATH_MAX];
+    mode_t mode;
 } git_obj_tree_entry;
 
 // Inits tree struct representing `folderpath`. Recursively creates tree for subfolders and blobs for files.

@@ -22,7 +22,6 @@
 #define fs_writeline fputs
 
 #define fs_getcwd getcwd
-#define fs_readdir readdir
 #define fs_closedir closedir
 
 typedef struct fs_fileinfo {
@@ -37,8 +36,24 @@ typedef struct fs_fileinfo {
     unsigned int fi_gid;
 } fs_fileinfo;
 
+#define FS_ISFILE 1
+#define FS_ISDIR 0
+
+typedef struct fs_dirent {
+    char de_name[PATH_MAX];
+    char de_path[PATH_MAX];
+    long de_ino;
+    int de_type; // `FS_FILE` or `FS_ISDIR`
+} fs_dirent;
+
+// Wrapper around `readdir` that has more guaranteed fields.
+fs_dirent *fs_readdir(DIR *);
+
+// Same as `mkdir` in POSIX. Note: mode is ignored on Win32.
+// @return 0 on success, -1 if any errors
 int fs_mkdir(const char *, mode_t);
 
+// Same as `opendir` in POSIX, except path is const
 DIR * fs_opendir(const char *);
 
 // Same as `stat()` function in POSIX 

@@ -19,6 +19,6 @@ typedef struct {
 // 1 if no repo found, and -1 if any errors.
 int get_working_repo();
 
-void hash_to_path(char hash[HASH_SIZE], char *out);
+void hash_to_path(const obj_hash hash, char *out);
 
 void free_repo();

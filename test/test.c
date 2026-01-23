@@ -100,10 +100,25 @@ void test_objects() {
     char *hash;
     git_obj_blob *blob, *blob2;
 
-    blob = create_blob(path);
+    fs_fileinfo fileinfo;
+    FILE *fptr;
+
+    if (fs_getinfo(path, &fileinfo) == -1) {
+        perror("Could not get file info");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((fptr = fs_fopen(path, "rb")) == NULL) {
+        perror("Could not open file");
+        exit(EXIT_FAILURE);
+    }
+
+    blob = create_blob(fileinfo.fi_size, fptr);
     assert(blob != NULL);
+    ASSERT_STREQ(blob->type, "blob");
     hash = blob->hash;
     printf("hash of blob: %s\n", hash);
+    fs_fclose(fptr);
 
     assert(write_blob_to_disk(blob) == 0);
     
@@ -116,18 +131,27 @@ void test_objects() {
     assert(fs_file_exists("build/notes.md") == 1);
     printf("================BLOB TESTS PASSED=============\n");
 
-    char path2[] = "include";
-    git_obj_tree *tree;
+    char path2[] = "./include";
+    git_obj_tree *tree, *tree2;
 
     tree = create_tree(path2);
     assert(tree != NULL);
-    assert(tree->num_entries == 3); // change this
+    assert(tree->num_entries > 0);
+    printf("hash of tree: %s\n", tree->hash);
+
+    assert(write_tree_to_disk(tree) == 0);
+
+    tree2 = read_tree_from_disk(tree->hash);
+    assert(tree2 != NULL);
+    ASSERT_STREQ(tree2->hash, tree->hash);
+    assert(tree2->num_entries == tree->num_entries);
+    assert(tree_cmp(tree, tree2, path) == 0);
+
+    printf("================TREE TESTS PASSED=============\n");
 
     free_blob(blob);
     free_blob(blob2);
     free_tree(tree);
-    assert(tree == NULL);
-    assert(blob2 == NULL);
     // fs_remove("build/notes.md");
 }
 

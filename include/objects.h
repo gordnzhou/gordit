@@ -21,7 +21,7 @@ typedef struct git_obj_blob {
 
 // Inits blob struct representing `filepath`.
 // @return pointer to blob or NULL on failure
-struct git_obj_blob *create_blob(const char *filepath);
+struct git_obj_blob *create_blob(size_t filesize, FILE *);
 
 // Creates blob file in objects folder, if it does not already exist.
 // @return 0 if successful, -1 otherwise.
@@ -51,7 +51,7 @@ typedef struct git_obj_tree_entry {
     struct git_obj_tree *tree;
     struct git_obj_blob *blob;
     char name[PATH_MAX];
-    mode_t mode;
+    unsigned int git_mode;
 } git_obj_tree_entry;
 
 // Inits tree struct representing `folderpath`. Recursively creates tree for subfolders and blobs for files.
@@ -77,6 +77,14 @@ int tree_find(const struct git_obj_tree *, obj_hash hash, struct git_obj_tree_en
 struct git_obj_blob **tree_get_blobs(struct git_obj_tree *, char *regex_filter, int *size);
 
 void free_tree(struct git_obj_tree *);
+
+// Checks if two trees are identical
+// TODO: return dynamically-sized list of blob names that were:
+// 1. added (not in 1st, in 2nd)
+// 2. removed (in 1st, not in 2nd)
+// 3. change (in both, but different hashes);
+// @return 0 if equal, -1 otherwise
+int tree_cmp(struct git_obj_tree *, struct git_obj_tree *, const char *);
 
 // maybe implement tree walk for tree diffing
 // tree diffing = walk through two flattened trees and produce list of blobs that differ

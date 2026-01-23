@@ -52,6 +52,8 @@ fs_dirent *fs_readdir(DIR *dir) {
     }
 
     ret.de_ino = ent->d_ino;
+    ret.de_mode = st.st_mode;
+    ret.de_size = st.st_size;
     strncpy(ret.de_path, path, PATH_MAX);
     strncpy(ret.de_name, ent->d_name, PATH_MAX);
     ret.de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;

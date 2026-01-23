@@ -43,6 +43,8 @@ typedef struct fs_dirent {
     char de_name[PATH_MAX];
     char de_path[PATH_MAX];
     long de_ino;
+    unsigned int de_mode;
+    size_t de_size;
     int de_type; // `FS_FILE` or `FS_ISDIR`
 } fs_dirent;
 

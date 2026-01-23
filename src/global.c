@@ -63,7 +63,7 @@ int get_working_repo() {
     return 0;
 }
 
-void hash_to_path(const obj_hash hash, char *out) {
+int hash_to_path(const obj_hash hash, char *out) {
     char path2[HASH_SIZE + 1];
 
     for (size_t i = HASH_SIZE + 1; i > 2; --i) {
@@ -72,8 +72,20 @@ void hash_to_path(const obj_hash hash, char *out) {
     path2[0] = hash[0];
     path2[1] = hash[1];
     path2[2] = '/';
-
     fs_path_join(REPO.objects_path, path2, out);
+    
+    if (fs_file_exists(out)) {
+        return 1;
+    }
+    
+    char parent_path[PATH_MAX];
+    fs_path_dirname(out, parent_path);
+    if (fs_mkdir(parent_path, 0700) == -1 && errno != EEXIST) {
+        perror("Could not make directory objects store");
+        return -1;
+    }
+
+    return 0;
 }
 
 void free_repo() {

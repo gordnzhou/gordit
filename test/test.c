@@ -10,7 +10,7 @@
 
 #define ASSERT_STREQ(act, exp) \
     if (strcmp(exp, act) != 0) { \
-        printf("Expected: %s, but got: %s", exp, act); assert(0); \
+        printf("Expected: %s, but got: %s\n", exp, act); assert(0); \
     } \
 
 void test_filesystem() {
@@ -115,8 +115,8 @@ void test_objects() {
 
     blob = create_blob(fileinfo.fi_size, fptr);
     assert(blob != NULL);
-    ASSERT_STREQ(blob->type, "blob");
-    hash = blob->hash;
+    ASSERT_STREQ(blob->obj.type, "blob")
+    hash = blob->obj.hash;
     printf("hash of blob: %s\n", hash);
     fs_fclose(fptr);
 
@@ -124,8 +124,8 @@ void test_objects() {
     
     blob2 = read_blob_from_disk(hash);
     assert(blob2 != NULL);
-    ASSERT_STREQ(blob2->hash, hash)
-    assert(blob2->size == blob->size);
+    ASSERT_STREQ(blob2->obj.hash, hash)
+    assert(blob2->obj.size == blob->obj.size);
 
     assert(create_file_from_blob("build/notes.md", blob2) == 0);
     assert(fs_file_exists("build/notes.md") == 1);
@@ -136,15 +136,17 @@ void test_objects() {
 
     tree = create_tree(path2);
     assert(tree != NULL);
-    assert(tree->num_entries > 0);
-    printf("hash of tree: %s\n", tree->hash);
-
+    assert(tree->entries.size > 0);
+    printf("hash of tree: %s\n", tree->obj.hash);
+    print_tree(tree);
+     
     assert(write_tree_to_disk(tree) == 0);
 
-    tree2 = read_tree_from_disk(tree->hash);
+    tree2 = read_tree_from_disk(tree->obj.hash);
     assert(tree2 != NULL);
-    ASSERT_STREQ(tree2->hash, tree->hash);
-    assert(tree2->num_entries == tree->num_entries);
+    ASSERT_STREQ(tree2->obj.hash, tree->obj.hash);
+    assert(tree2->entries.size == tree->entries.size);
+
     assert(tree_cmp(tree, tree2, path) == 0);
 
     printf("================TREE TESTS PASSED=============\n");

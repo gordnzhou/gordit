@@ -42,10 +42,10 @@ int git_init_repo() {
 int main(int argc, char* argv[]) {
     int res = get_working_repo();
     if (res == 1) {
-        printf("fatal: not in a repository.");
+        printf("fatal: not in a repository.\n");
         return 0;
     } else if (res == -1) {
-        printf("Could not find repository.");
+        printf("Could not find repository.\n");
         return 1;
     }
 
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
     //     printf("Repository already exists at current working directory.\n");
     //     return 0;
     // } else {
-    //     printf("Initalized empty repository in current working directory.");
+    //     printf("Initalized empty repository in current working directory.\n");
     // }
 
     (void)argc;

@@ -22,9 +22,9 @@ int git_find_root(char *path, char *repo_root) {
     }
 
     fs_dirent *ent;
-    while ((ent = fs_readdir(dir)) != NULL) {
+    while ((ent = fs_readdir(dir, path)) != NULL) {
         if (strcmp(ent->de_name, GIT_FOLDER) == 0) {
-            strcpy(repo_root, path);
+            snprintf(repo_root, PATH_MAX, "%s", path);
             fs_closedir(dir);
             return 1;
         }
@@ -64,9 +64,9 @@ int get_working_repo() {
 }
 
 int hash_to_path(const obj_hash hash, char *out) {
-    char path2[HASH_SIZE + 1];
+    char path2[OBJ_HASH_SIZE + 1];
 
-    for (size_t i = HASH_SIZE + 1; i > 2; --i) {
+    for (size_t i = OBJ_HASH_SIZE; i > 2; --i) {
         path2[i] = hash[i - 1];
     }
     path2[0] = hash[0];
@@ -80,7 +80,7 @@ int hash_to_path(const obj_hash hash, char *out) {
     
     char parent_path[PATH_MAX];
     fs_path_dirname(out, parent_path);
-    if (fs_mkdir(parent_path, 0700) == -1 && errno != EEXIST) {
+    if (fs_mkdir(parent_path, 0700) == -1) {
         perror("Could not make directory objects store");
         return -1;
     }

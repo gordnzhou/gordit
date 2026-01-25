@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "filesystem.h"
     
@@ -14,17 +15,25 @@
 #endif
 
 int fs_mkdir(const char *path, mode_t mode) {
+    int res;
+
 #ifdef _WIN32
-    return mkdir(path);
+    res = mkdir(path);
     (void)mode;
 #else
-    return mkdir(path, mode);
+    res = mkdir(path, mode);
 #endif
+
+    if (res == -1 && errno == EEXIST) {
+        res = 1;
+    }
+
+    return res;
 }
 
 DIR *fs_opendir(const char *path) {
     char copy[PATH_MAX];
-    strcpy(copy, path);
+    snprintf(copy, PATH_MAX, "%s", path);
 
 #ifdef _WIN32
     char temp[2] = {'\\', '\0'};
@@ -34,30 +43,36 @@ DIR *fs_opendir(const char *path) {
     return opendir(copy); 
 }
 
-fs_dirent *fs_readdir(DIR *dir) {
-    static fs_dirent ret;
-    static struct stat st;
+static fs_dirent ret;
+static struct stat st;
 
+fs_dirent *fs_readdir(DIR *dir, const char *foldername){
     struct dirent *ent;
     if ((ent = readdir(dir)) == NULL) {
         return NULL;
     }
 
-    char path[PATH_MAX], temp[PATH_MAX];
-    assert(fs_path_dirname(dir->dd_name, temp) == 0);
-    fs_path_join(temp, ent->d_name, path);
-
-    if (stat(path, &st) != 0) {
-        return NULL;
-    }
-
+    char path[PATH_MAX];
+    fs_path_join(foldername, ent->d_name, path);
+    
+    memset(&ret, 0, sizeof(ret));
     ret.de_ino = ent->d_ino;
-    ret.de_mode = st.st_mode;
-    ret.de_size = st.st_size;
-    strncpy(ret.de_path, path, PATH_MAX);
-    strncpy(ret.de_name, ent->d_name, PATH_MAX);
-    ret.de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;
+    snprintf(ret.de_name, PATH_MAX, "%s", ent->d_name);
+    snprintf(ret.de_path, PATH_MAX, "%s", path);
 
+    if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
+        if (lstat(path, &st) != 0) {
+            perror("stat");
+            return NULL;
+        }
+
+        ret.de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;
+        ret.de_size = st.st_size;
+        ret.de_mode = st.st_mode;
+    } else {
+        ret.de_type = FS_ISDIR;
+    }
+    
     return &ret;
 }
 
@@ -91,6 +106,33 @@ int _rem_trailing_slashes(char *c) {
     return 0; 
 }
 
+int fs_file_exists(const char *filename) {
+    FILE *file;
+    if ((file = fopen(filename, "r")) == NULL) {
+        return 0;
+    }
+
+    fclose(file);
+    return 1;
+}
+
+void fs_path_join(const char *path1, const char *path2, char *out) {
+    size_t len1 = strlen(path1);
+    size_t len2 = strlen(path2);
+    assert(len1 + len2 + 2 <= PATH_MAX);
+
+    strncpy(out, path1, PATH_MAX);
+    out[PATH_MAX - 1] = '\0';
+
+    if (len1 > 0 && out[len1 - 1] != '\\' && out[len1 - 1] != '/') 
+        strcat(out, "/");
+
+    const char *p2 = path2;
+    if (*p2 == '\\' || *p2 == '/') p2++;
+
+    strncat(out, p2, PATH_MAX - strlen(out) - 1);
+}
+
 #ifdef _WIN32
 
 int fs_path_abs(const char *path, char *out) {    
@@ -101,7 +143,7 @@ int fs_path_abs(const char *path, char *out) {
 }
 
 int fs_path_dirname(const char* path, char *out) {
-    strcpy(out, path);
+    snprintf(out, PATH_MAX, "%s", path);
     // path is empty or all slashes 
     if (_rem_trailing_slashes(out) == 1) {
         out[1] = '\0';
@@ -152,23 +194,6 @@ void fs_path_basename(const char* path, char *out) {
     return;
 }
 
-void fs_path_join(const char *path1, const char *path2, char *out) {
-    size_t len1 = strlen(path1);
-    size_t len2 = strlen(path2);
-    assert(len1 + len2 + 2 <= PATH_MAX);
-
-    strncpy(out, path1, PATH_MAX);
-    out[PATH_MAX - 1] = '\0';
-
-    if (len1 > 0 && out[len1 - 1] != '\\' && out[len1 - 1] != '/') 
-        strcat(out, "\\");
-
-    const char *p2 = path2;
-    if (*p2 == '\\' || *p2 == '/') p2++;
-
-    strncat(out, p2, PATH_MAX - strlen(out) - 1);
-}
-
 #else
 
 int fs_path_abs(const char *path, char *out) {
@@ -194,24 +219,4 @@ void fs_path_basename(const char* path, char *out) {
 
     return;
 }
-
-void fs_path_join(const char *path1, const char *path2, char *out) {
-    size_t len1 = strlen(path1);
-    size_t len2 = strlen(path2);
-    assert(len1 + len2 + 2 > PATH_MAX);
-
-    strcpy(out, path1);
-    if (len1 > 0 && out[len1 - 1] != '/') strcat(out, "/");
-    strcat(out, path2);
-}
 #endif
-
-int fs_file_exists(const char *filename) {
-    FILE *file;
-    if ((file = fopen(filename, "r")) != NULL) {
-        fclose(file);
-        return 1;
-    } else {
-        return 0;
-    }
-}

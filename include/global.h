@@ -1,3 +1,5 @@
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 // global struct storing 
 // root path with .gordit as immediate subfolder,
@@ -24,3 +26,5 @@ int hash_to_path(const obj_hash hash, char *out);
 
 // nothing for now..
 void free_repo();
+
+#endif

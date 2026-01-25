@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <unistd.h>
     
 #ifndef PATH_MAX
     #define PATH_MAX 4096
@@ -49,21 +50,21 @@ typedef struct fs_dirent {
 } fs_dirent;
 
 // Wrapper around `readdir` that has more guaranteed fields.
-fs_dirent *fs_readdir(DIR *);
+fs_dirent *fs_readdir(DIR *, const char *);
 
 // Same as `mkdir` in POSIX. Note: mode is ignored on Win32.
-// @return 0 on success, -1 if any errors
+// @return 1 if folder already exists, 0 on success, otherwise -1
 int fs_mkdir(const char *, mode_t);
 
 // Same as `opendir` in POSIX, except path is const
 DIR * fs_opendir(const char *);
 
 // Same as `stat()` function in POSIX 
-// @return 0 on success, -1 if any errors
+// @return 0 on success, otherwise -1
 int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
 
 // @brief Gets path in absolute form.  
-// @return 0 on success, -1 if any errors.
+// @return 0 on success, otherwise -1.
 int fs_path_abs(const char *path, char *out);
 
 // @brief Gets directory component of path, removing any trailing slashes.

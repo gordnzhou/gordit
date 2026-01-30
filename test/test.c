@@ -4,9 +4,10 @@
 #include <time.h>
 #include <assert.h>
 
-#include "global.h"
+#include "repo.h"
 #include "filesystem.h"
 #include "objects.h"
+#include "dircache.h"
 
 #define ASSERT_STREQ(act, exp) \
     if (strcmp(exp, act) != 0) { \
@@ -95,34 +96,19 @@ void test_filesystem() {
     printf("================FILESYSTEM TESTS PASSED================\n");
 }
 
-void test_objects() {
-    char path[] = "notes.md";
+void test_objects(const git_repo *repo) {
     char *hash;
     git_obj_blob *blob, *blob2;
 
-    fs_fileinfo fileinfo;
-    FILE *fptr;
-
-    if (fs_getinfo(path, &fileinfo) == -1) {
-        perror("Could not get file info");
-        exit(EXIT_FAILURE);
-    }
-
-    if ((fptr = fs_fopen(path, "rb")) == NULL) {
-        perror("Could not open file");
-        exit(EXIT_FAILURE);
-    }
-
-    blob = create_blob(fileinfo.fi_size, fptr);
+    blob = create_blob_from_path("notes.md");
     assert(blob != NULL);
     ASSERT_STREQ(blob->obj.type, "blob")
     hash = blob->obj.hash;
     printf("hash of blob: %s\n", hash);
-    fs_fclose(fptr);
 
-    assert(write_blob_to_disk(blob) == 0);
+    assert(write_blob_to_disk(repo, blob) == 0);
     
-    blob2 = read_blob_from_disk(hash);
+    blob2 = create_blob_from_disk(repo, hash);
     assert(blob2 != NULL);
     ASSERT_STREQ(blob2->obj.hash, hash)
     assert(blob2->obj.size == blob->obj.size);
@@ -134,35 +120,53 @@ void test_objects() {
     char path2[] = "./include";
     git_obj_tree *tree, *tree2;
 
-    tree = create_tree(path2);
+    tree = create_tree_from_path(path2);
     assert(tree != NULL);
     assert(tree->entries.size > 0);
     printf("hash of tree: %s\n", tree->obj.hash);
     print_tree(tree);
      
-    assert(write_tree_to_disk(tree) == 0);
+    assert(write_tree_to_disk(repo, tree) == 0);
 
-    tree2 = read_tree_from_disk(tree->obj.hash);
+    tree2 = create_tree_from_disk(repo, tree->obj.hash);
     assert(tree2 != NULL);
     ASSERT_STREQ(tree2->obj.hash, tree->obj.hash);
     assert(tree2->entries.size == tree->entries.size);
 
-    assert(tree_cmp(tree, tree2, path) == 0);
+    assert(tree_cmp(tree, tree2, path2) == 0);
 
-    printf("================TREE TESTS PASSED=============\n");
 
     free_blob(blob);
     free_blob(blob2);
     free_tree(tree);
+    printf("================TREE TESTS PASSED=============\n");
     // fs_remove("build/notes.md");
 }
 
-int main() {
-    assert(get_working_repo() == 0);
+void test_index(const git_repo * repo) {
+    git_dircache *dircache = create_dircache(repo);
     
-    test_filesystem();
-    test_objects();
+    printf("num of entries: %d\n", dircache->num_entries);
+    for (int i = 0; i < dircache->num_entries; i++) {
+        git_index_entry *entry = dircache->entries[i];
+        assert(entry != NULL);
+        printf("name: %s, hash: %s size: %d\n", entry->name, *(entry->hash), (int)entry->info->fi_size);
+    }
 
+    free_dircache(dircache);
+    printf("================INDEX TESTS PASSED=============\n");
+}
+
+int main() {
+    int is_error;
+    const git_repo *repo = get_working_repo(&is_error);
+    assert(is_error == 0 && "Cannot get repo"); 
+
+    test_filesystem();
+    test_objects(repo);
+    test_index(repo);
+
+    free((void *)repo);
     printf("Success! All tests passed!\n");
     return 0;
 }

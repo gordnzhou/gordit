@@ -61,7 +61,7 @@ fs_dirent *fs_readdir(DIR *dir, const char *foldername){
     snprintf(ret.de_path, PATH_MAX, "%s", path);
 
     if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
-        if (lstat(path, &st) != 0) {
+        if (stat(path, &st) != 0) {
             perror("stat");
             return NULL;
         }
@@ -117,20 +117,15 @@ int fs_file_exists(const char *filename) {
 }
 
 void fs_path_join(const char *path1, const char *path2, char *out) {
-    size_t len1 = strlen(path1);
-    size_t len2 = strlen(path2);
-    assert(len1 + len2 + 2 <= PATH_MAX);
+    char *sep = "/";
 
-    strncpy(out, path1, PATH_MAX);
-    out[PATH_MAX - 1] = '\0';
-
-    if (len1 > 0 && out[len1 - 1] != '\\' && out[len1 - 1] != '/') 
-        strcat(out, "/");
-
+    int len1 = strlen(path1);
+    if (len1 > 0 && out[len1 - 1] == '\\' && out[len1 - 1] == '/') sep = "";
+    
     const char *p2 = path2;
     if (*p2 == '\\' || *p2 == '/') p2++;
-
-    strncat(out, p2, PATH_MAX - strlen(out) - 1);
+    
+    snprintf(out, PATH_MAX, "%s%s%s", path1, sep, p2);
 }
 
 #ifdef _WIN32

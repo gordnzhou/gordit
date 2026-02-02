@@ -31,6 +31,7 @@ void test_filesystem() {
         } while (0)
 
 #ifdef _WIN32
+
     TEST_PATH_PARENT("C:\\home", "C:", 0);
     TEST_PATH_PARENT("C:\\a\\b\\", "C:\\a", 0);
     TEST_PATH_PARENT("/", "/", 1);
@@ -122,7 +123,7 @@ void test_objects(const git_repo *repo) {
 
     tree = create_tree_from_path(path2);
     assert(tree != NULL);
-    assert(tree->entries.size > 0);
+    assert(tree->size > 0);
     printf("hash of tree: %s\n", tree->obj.hash);
     print_tree(tree);
      
@@ -131,7 +132,7 @@ void test_objects(const git_repo *repo) {
     tree2 = create_tree_from_disk(repo, tree->obj.hash);
     assert(tree2 != NULL);
     ASSERT_STREQ(tree2->obj.hash, tree->obj.hash);
-    assert(tree2->entries.size == tree->entries.size);
+    assert(tree2->size == tree->size);
 
     assert(tree_cmp(tree, tree2, path2) == 0);
 
@@ -150,10 +151,38 @@ void test_index(const git_repo * repo) {
     for (int i = 0; i < dircache->num_entries; i++) {
         git_index_entry *entry = dircache->entries[i];
         assert(entry != NULL);
-        printf("name: %s, hash: %s size: %d\n", entry->name, *(entry->hash), (int)entry->info->fi_size);
+        printf("name: %s, hash: %s size: %d\n", entry->name, entry->hash, (int)entry->info.fi_size);
     }
 
+    char *path = "include/inner/make.c";
+    char abs_path[PATH_MAX];
+    assert(fs_path_abs(path, abs_path) == 0);
+    printf("adding %s to index...\n", abs_path);
+
+    assert(add_file_to_dc(repo, dircache, abs_path) == 0);
+
+    printf("num of entries: %d\n", dircache->num_entries);
+    for (int i = 0; i < dircache->num_entries; i++) {
+        git_index_entry *entry = dircache->entries[i];
+        assert(entry != NULL);
+        printf("name: %s, hash: %s size: %d\n", entry->name, entry->hash, (int)entry->info.fi_size);
+    }
+
+    char *prev = "";
+    for (int i = 0; i < dircache->num_entries; i++) {
+        git_index_entry *entry = dircache->entries[i];
+        assert(strcmp(prev, entry->name) <= 0 && "entries are not sorted");
+        prev = entry->name;
+    }
+
+    git_obj_tree *tree = build_tree_from_index(dircache);
+    assert(tree != NULL);
+    print_tree(tree);
+
+    // assert(write_index(repo, dircache) == 0);
+
     free_dircache(dircache);
+    free_tree(tree);
     printf("================INDEX TESTS PASSED=============\n");
 }
 

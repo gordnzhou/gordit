@@ -169,24 +169,24 @@ int fs_path_dirname(const char* path, char *out) {
 }
 
 void fs_path_basename(const char* path, char *out) {
-    strcpy(out, path);
+    char *path_copy = strdup(path);
     // path is empty or all slashes 
-    if (_rem_trailing_slashes(out) == 1) {
+    if (_rem_trailing_slashes(path_copy) == 1) {
+        out[0] = path[0];
         out[1] = '\0';
         return;
     }
     
-    const char *start = path;
-    char *lfs = strrchr(out, '/');
-    char *lbs = strrchr(out, '\\');
+    const char *start = path_copy;
+    char *lfs = strrchr(path_copy, '/');
+    char *lbs = strrchr(path_copy, '\\');
     char *ls = (lfs > lbs) ? lfs : lbs;
-
     if (ls != NULL) {
         start = ls + 1;
-        strcpy(out, start);
     }
 
-    return;
+    snprintf(out, PATH_MAX, "%s", start);
+    free(path_copy);
 }
 
 #else

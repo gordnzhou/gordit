@@ -6,6 +6,10 @@
 #define OBJ_HASH_SIZE 41
 typedef char obj_hash[OBJ_HASH_SIZE];
 
+#define GIT_MODE_DIR 0040000
+#define GIT_MODE_FILE_X 0100755
+#define GIT_MODE_FILE_R 0100644
+
 #define GIT_FOLDER  ".gordit"
 #define REFS_NAME "refs"
 #define OBJS_NAME "objects"
@@ -40,6 +44,6 @@ int obj_store_path(const git_repo *, const obj_hash, char *out);
 
 // used for name in index and trees
 // @returns '/' seperated path relative to repo root.
-char *repo_rel_path(const git_repo *, const char *);
+void repo_rel_path(const git_repo *, const char *, char *out);
 
 #endif

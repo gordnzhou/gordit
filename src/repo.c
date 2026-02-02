@@ -9,23 +9,16 @@
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int stat_mode_to_git(unsigned int st_mode) {
     if (S_ISDIR(st_mode)) {
-        return 0040000;
+        return GIT_MODE_DIR;
     } 
     if (st_mode & S_IXUSR) {
-        return 0100755;
+        return GIT_MODE_FILE_X;
     } 
-    return 0100644;
+    return GIT_MODE_FILE_R;
 }
 
-// NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int git_mode_to_stat(unsigned int git_mode) {
-    if (git_mode == 0100644) {
-        return 0644;
-    }
-    if (git_mode == 0100755) {
-        return 0755;
-    }
-    return 0;
+    return git_mode & 0x1FF;
 }
 
 
@@ -143,12 +136,20 @@ int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
     return 0;
 }
 
-char *repo_rel_path(const git_repo *repo, const char *abs_path) {
+void repo_rel_path(const git_repo *repo, const char *abs_path, char *out) {
     int root_len = strlen(repo->root_path);
     int path_len = strlen(abs_path);
     int rel_len = path_len - root_len;
 
     assert(rel_len > 0 && memcmp(repo->root_path, abs_path, root_len) == 0);
 
-    return strdup(abs_path + root_len + 1);
+    snprintf(out, PATH_MAX, "%s", abs_path + root_len + 1);
+     
+    char *ptr = out;
+    while (*ptr != '\0') {
+        if (*ptr == '\\') {
+            *ptr = '/';
+        }
+        ptr++;
+    }
 }

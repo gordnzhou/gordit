@@ -68,7 +68,7 @@ int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
 int fs_path_abs(const char *path, char *out);
 
 // @brief Gets directory component of path, removing any trailing slashes.
-// @return 0 on success, 1 if path has no directory component
+// @return 1 if path has no slashes, 0 otherwise
 int fs_path_dirname(const char* path, char* out);
 
 // @brief Gets final component of path (name of rightmost file or folder).

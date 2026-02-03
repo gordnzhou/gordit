@@ -34,19 +34,19 @@ void test_filesystem() {
 
     TEST_PATH_PARENT("C:\\home", "C:", 0);
     TEST_PATH_PARENT("C:\\a\\b\\", "C:\\a", 0);
-    TEST_PATH_PARENT("/", "/", 1);
+    TEST_PATH_PARENT("/", "/", 0);
     TEST_PATH_PARENT(".\\bob", ".", 0);
     TEST_PATH_PARENT(".\\a\\b\\c/d", ".\\a\\b\\c", 0);
     TEST_PATH_PARENT("C:/A\\b\\", "C:/A", 0);
     TEST_PATH_PARENT("C:", ".", 1);
-    TEST_PATH_PARENT("C:\\", ".", 1);
+    TEST_PATH_PARENT("C:\\", ".", 0);
     TEST_PATH_PARENT("\\\\share\\a", "\\\\share", 0);
     TEST_PATH_PARENT("file.txt", ".", 1);
 
     TEST_PATH_PARENT("", "", 1);
     TEST_PATH_PARENT(".", ".", 1);
-    TEST_PATH_PARENT("\\\\share", ".", 1);
-    TEST_PATH_PARENT("/home", ".", 1);
+    TEST_PATH_PARENT("\\\\share", ".", 0);
+    TEST_PATH_PARENT("/home", ".", 0);
 
     TEST_PATH_BASENAME("C:\\home", "home");
     TEST_PATH_BASENAME("C:\\a\\b\\", "b");
@@ -66,17 +66,17 @@ void test_filesystem() {
 #else
     TEST_PATH_PARENT("C:/home", "C:", 0);
     TEST_PATH_PARENT("C:/a/b/", "C:/a", 0);
-    TEST_PATH_PARENT("/", "/", 1);
+    TEST_PATH_PARENT("/", "/", 0);
     TEST_PATH_PARENT("./bob", ".", 0);
     TEST_PATH_PARENT("./a/b/c/d", "./a/b/c", 0);
     TEST_PATH_PARENT("C:/A/b/", "C:/A", 0);
-    TEST_PATH_PARENT("C:", ".", 0);
+    TEST_PATH_PARENT("C:", ".", 1);
     TEST_PATH_PARENT("C:/", ".", 0);
     TEST_PATH_PARENT("/share/a", "/share", 0);
-    TEST_PATH_PARENT("file.txt", ".", 0);
+    TEST_PATH_PARENT("file.txt", ".", 1);
     
     TEST_PATH_PARENT("", ".", 1);
-    TEST_PATH_PARENT(".", ".", 0);
+    TEST_PATH_PARENT(".", ".", 1);
     TEST_PATH_PARENT("/home", "/", 0);
 
     TEST_PATH_BASENAME("C:/home", "home");
@@ -146,27 +146,16 @@ void test_objects(const git_repo *repo) {
 
 void test_index(const git_repo * repo) {
     git_dircache *dircache = create_dircache(repo);
-    
-    printf("num of entries: %d\n", dircache->num_entries);
-    for (int i = 0; i < dircache->num_entries; i++) {
-        git_index_entry *entry = dircache->entries[i];
-        assert(entry != NULL);
-        printf("name: %s, hash: %s size: %d\n", entry->name, entry->hash, (int)entry->info.fi_size);
-    }
+    print_dircache(dircache);
 
-    char *path = "include/inner/make.c";
+    char *path = "build/test.o";
     char abs_path[PATH_MAX];
     assert(fs_path_abs(path, abs_path) == 0);
     printf("adding %s to index...\n", abs_path);
 
     assert(add_file_to_dc(repo, dircache, abs_path) == 0);
 
-    printf("num of entries: %d\n", dircache->num_entries);
-    for (int i = 0; i < dircache->num_entries; i++) {
-        git_index_entry *entry = dircache->entries[i];
-        assert(entry != NULL);
-        printf("name: %s, hash: %s size: %d\n", entry->name, entry->hash, (int)entry->info.fi_size);
-    }
+    print_dircache(dircache);
 
     char *prev = "";
     for (int i = 0; i < dircache->num_entries; i++) {
@@ -178,6 +167,8 @@ void test_index(const git_repo * repo) {
     git_obj_tree *tree = build_tree_from_index(dircache);
     assert(tree != NULL);
     print_tree(tree);
+
+    assert(remove_file_from_dc(repo, dircache, abs_path) != -1);
 
     // assert(write_index(repo, dircache) == 0);
 

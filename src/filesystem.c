@@ -142,7 +142,7 @@ int fs_path_dirname(const char* path, char *out) {
     // path is empty or all slashes 
     if (_rem_trailing_slashes(out) == 1) {
         out[1] = '\0';
-        return 1;
+        goto end;
     }
 
     char *lfs = strrchr(out, '/');
@@ -153,7 +153,7 @@ int fs_path_dirname(const char* path, char *out) {
     if (ls == NULL) {
         out[0] = '.';
         out[1] = '\0';
-        return 1;
+        goto end;
     }
 
     *ls = '\0';
@@ -162,10 +162,10 @@ int fs_path_dirname(const char* path, char *out) {
     if (strspn(out, "/\\") == strlen(out)) {
         out[0] = '.';
         out[1] = '\0';
-        return 1;
     }
 
-    return 0;
+end:
+    return strchr(path, '/') == NULL & strchr(path, '\\') == NULL;
 }
 
 void fs_path_basename(const char* path, char *out) {
@@ -192,8 +192,6 @@ void fs_path_basename(const char* path, char *out) {
 #else
 
 int fs_path_abs(const char *path, char *out) {
-    if (!path || !out) return -1;
-
     return realpath(path, out) == NULL ? -1 : 0;
 }
 
@@ -203,7 +201,7 @@ int fs_path_dirname(const char* path, char *out) {
     strcpy(out, res);
     free(path_copy);
 
-    return path[0] == '\0' || strcmp(path, "/") == 0;
+    return strchr(path, '/') == NULL;
 }
 
 void fs_path_basename(const char* path, char *out) {

@@ -24,7 +24,7 @@ unsigned int git_mode_to_stat(unsigned int git_mode) {
 
 // Walks up `path` until it finds a directory with git folder. Fills `repo_root` with that directory path. 
 // @returns 1 on successful find and 0 if unsuccessful.
-int git_find_root(char *path, char *repo_root) {
+int git_find_root(const char *path, char *repo_root) {
     DIR *dir;
     if ((dir = fs_opendir(path)) == NULL) {
         return 0;
@@ -41,24 +41,15 @@ int git_find_root(char *path, char *repo_root) {
     fs_closedir(dir);
 
     char parent[PATH_MAX];
-    if (fs_path_dirname(path, parent) != 0) {
+    fs_path_dirname(path, parent);
+    if (strcmp(path, parent) == 0) {
         return 0;
     }
 
     return git_find_root(parent, repo_root);
 }
 
-// If git folder exists in cwd do nothing.
-// Otherwise create git folder in cwd, including subfolders, index and HEAD.
-// @returns 0 on success, 1 if git folder already in cwd, -1 otherwise. 
-int git_init_repo() {
-    char cwd[PATH_MAX];
-
-    if (fs_getcwd(cwd, sizeof(cwd)) == NULL) {
-        perror("getcwd() error");
-        return -1;
-    }
-
+int git_init_repo(const char *cwd) {
     char head_path[PATH_MAX];
     fs_path_join(cwd, HEAD_PATH, head_path);
 
@@ -72,27 +63,20 @@ int git_init_repo() {
         return -1;
     }
 
-    FILE *f_ptr;
-    if ((f_ptr = fs_fopen(HEAD_PATH, "wb")) != 0) {
+    FILE *fptr;
+    if ((fptr = fs_fopen(HEAD_PATH, "wb")) == NULL) {
         return -1;
     }
-    
-    fs_fclose(f_ptr);
+
+    // TODO: make seperate HEAD and refs initialization function
+    fprintf(fptr, "refs: refs/heads/main");
+    fs_fclose(fptr);
    
     return 0;
 }
 
-const git_repo *get_working_repo(int *is_error) {
-    char cwd[PATH_MAX];
+const git_repo *get_working_repo(const char *cwd) {
     char repo_root[PATH_MAX];
-    *is_error = 0;
-
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        perror("getcwd() error");
-        *is_error = 1;
-        return NULL;
-    }
-
     if (!git_find_root(cwd, repo_root)) {
         return NULL;
     }
@@ -134,6 +118,16 @@ int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
     }
 
     return 0;
+}
+
+int is_path_in_repo(const git_repo *repo, const char *abs_path) {
+    int root_len = strlen(repo->root_path);
+    int path_len = strlen(abs_path);
+    int rel_len = path_len - root_len;
+
+    return rel_len > 0 && 
+        memcmp(abs_path, repo->root_path, root_len) == 0 &&
+        strstr(abs_path, GIT_FOLDER) == NULL;
 }
 
 void repo_rel_path(const git_repo *repo, const char *abs_path, char *out) {

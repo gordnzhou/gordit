@@ -16,10 +16,10 @@ typedef char obj_hash[OBJ_HASH_SIZE];
 #define HEAD_NAME "HEAD"
 #define INDEX_NAME "index"
 
-#define REFS_FOLDER GIT_FOLDER REFS_NAME
-#define OBJS_FOLDER GIT_FOLDER OBJS_NAME
-#define HEAD_PATH GIT_FOLDER HEAD_NAME
-#define INDEX_PATH GIT_FOLDER INDEX_NAME
+#define REFS_FOLDER GIT_FOLDER "/" REFS_NAME
+#define OBJS_FOLDER GIT_FOLDER "/" OBJS_NAME
+#define HEAD_PATH GIT_FOLDER "/" HEAD_NAME
+#define INDEX_PATH GIT_FOLDER "/" INDEX_NAME
 
 typedef struct {
     char root_path[PATH_MAX];
@@ -35,12 +35,20 @@ unsigned int stat_mode_to_git(unsigned int st_mode);
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int git_mode_to_stat(unsigned int git_mode);
  
-// based on current working directory
-const git_repo *get_working_repo(int *is_error);
+// gets repo context 
+const git_repo *get_working_repo(const char *cwd);
+
+// If git folder exists in cwd do nothing.
+// Otherwise create git folder in cwd, including subfolders, index and HEAD.
+// @returns 0 on success, 1 if git folder already in cwd, -1 otherwise. 
+int git_init_repo(const char *cwd);
 
 // gets path of object in repo's objects folder
 // @return 1 if object already in git folder, 0 if new, -1 if could not create dir
 int obj_store_path(const git_repo *, const obj_hash, char *out);
+
+// @return 1 if path is inside of repo and not in git folder
+int is_path_in_repo(const git_repo *, const char *);
 
 // used for name in index and trees
 // @returns '/' seperated path relative to repo root.

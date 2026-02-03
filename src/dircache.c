@@ -35,6 +35,15 @@ void free_dircache(git_dircache *dircache) {
     free(dircache);
 }
 
+void print_dircache(git_dircache *dircache) {
+    printf("num of entries: %d\n", dircache->num_entries);
+    for (int i = 0; i < dircache->num_entries; i++) {
+        git_index_entry *entry = dircache->entries[i];
+        assert(entry != NULL);
+        printf("name: %s, hash: %s size: %d\n", entry->name, entry->hash, (int)entry->info.fi_size);
+    }
+}
+
 git_index_entry *parse_index_entry(unsigned char **buf_entry_start) {
     unsigned char *buf_ptr = *buf_entry_start;
     git_index_entry *entry = malloc(sizeof(*entry));
@@ -314,7 +323,7 @@ int add_file_to_dc(const git_repo *repo, git_dircache *dircache, char *filepath)
     return 0;
 }
 
-void remove_file_from_dc(const git_repo *repo, git_dircache *dircache, char *filepath) {
+int remove_file_from_dc(const git_repo *repo, git_dircache *dircache, char *filepath) {
     char name[PATH_MAX];
     repo_rel_path(repo, filepath, name);
 
@@ -340,6 +349,8 @@ void remove_file_from_dc(const git_repo *repo, git_dircache *dircache, char *fil
     }
 
     dircache->num_entries -= count_match;
+
+    return found >= 0 ? 0 : -1;
 }
 
 int add_tree_entry_to_dc(const git_repo *repo, git_dircache *dircache, git_tree_entry *tree_entry) {
@@ -395,8 +406,8 @@ git_obj_tree *build_tree_from_index(git_dircache *dircache) {
 
             part = strtok(NULL, "/");
         }
-    
-add_entry:
+
+    add_entry:;
         git_tree_entry *b_entry = malloc(sizeof(*b_entry));
         b_entry->type = BLOB_OBJ;
         b_entry->git_mode = entry->git_mode;

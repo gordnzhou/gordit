@@ -145,7 +145,7 @@ git_dircache *create_dircache(const git_repo * repo) {
     }
 
     FILE *fptr;
-    fs_fileinfo info;
+    fs_statinfo info;
     
     if (fs_getinfo(repo->index_path, &info) != 0) {
         return NULL;
@@ -219,7 +219,7 @@ int cmp_index_entry(const void *a, const void *b) {
     return strcmp(ea->name, eb->name);
 }
 
-int index_sort_cmp(char *name1, char *name2) {
+int index_sort_cmp(const char *name1, const char *name2) {
     size_t size1 = strlen(name1) + 1;
     size_t size2 = strlen(name2) + 1;
     
@@ -277,17 +277,12 @@ int add_index_entry(git_dircache *dircache, git_index_entry *entry) {
     return 0;
 }
 
-int add_file_to_dc(const git_repo *repo, git_dircache *dircache, char *filepath) {
-    struct fs_fileinfo info;
-    if (fs_getinfo(filepath, &info) != 0) {
-        return -1;
-    }
-
+int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo) {
     git_index_entry *entry = malloc(sizeof(*entry));
-    entry->info = info;
+    entry->info = finfo->stat;
     entry->stage_num = 0;
-    entry->git_mode = stat_mode_to_git(info.fi_mode);
-    repo_rel_path(repo, filepath, entry->name);
+    entry->git_mode = stat_mode_to_git(finfo->stat.fi_mode);
+    snprintf(entry->name, PATH_MAX, "%s", finfo->name);
     entry->namelen = strlen(entry->name);
 
     git_index_entry **found_entry = (git_index_entry **)bsearch(&entry, 
@@ -296,17 +291,15 @@ int add_file_to_dc(const git_repo *repo, git_dircache *dircache, char *filepath)
 
     if (found_entry != NULL) {
         int same = 1;
-        same &= (*found_entry)->info.fi_size == info.fi_size;
-        same &= (*found_entry)->info.fi_mtime == info.fi_mtime;
-        same &= (*found_entry)->info.fi_atime == info.fi_atime;
-        same &= (*found_entry)->info.fi_ctime == info.fi_ctime;
-
+        same &= (*found_entry)->info.fi_size == finfo->stat.fi_size;
+        same &= (*found_entry)->info.fi_mtime == finfo->stat.fi_mtime;
+        same &= (*found_entry)->info.fi_ctime == finfo->stat.fi_ctime;
         if (same) {
             return 0;
         }
     }
 
-    git_obj_blob *blob = create_blob_from_path(filepath);
+    git_obj_blob *blob = create_blob_from_file(finfo);
     if (blob == NULL) {
         free(entry);
         return -1;
@@ -323,15 +316,12 @@ int add_file_to_dc(const git_repo *repo, git_dircache *dircache, char *filepath)
     return 0;
 }
 
-int remove_file_from_dc(const git_repo *repo, git_dircache *dircache, char *filepath) {
-    char name[PATH_MAX];
-    repo_rel_path(repo, filepath, name);
-
+int remove_file_from_dc(git_dircache *dircache, const fileinfo *finfo) {
     int found = -1, count_match = 0;
     for (int i = 0; i < dircache->num_entries; i++) {
         git_index_entry *entry = dircache->entries[i];
 
-        if (index_sort_cmp(name, entry->name) == 0) {
+        if (index_sort_cmp(finfo->name, entry->name) == 0) {
             if (found == -1) {
                 found = i;
             }

@@ -8,6 +8,7 @@
 #include "repo.h"
 #include "filesystem.h"
 #include "objects.h"
+#include "filespec.h"
 
 #define CRLF_LF_ON 1
 
@@ -145,25 +146,12 @@ void create_git_obj(const unsigned char *file_contents, size_t size, const char 
     hash_data(obj->data, obj->size, &(obj->hash));
 }
 
-git_obj_blob *create_blob_from_path(const char *filepath) {
-    fs_fileinfo fileinfo;
-    FILE *fptr;
-
-    if (fs_getinfo(filepath, &fileinfo) == -1) {
-        perror("Could not get file info");
-        return NULL;
-    }
-
-    if ((fptr = fs_fopen(filepath, "rb")) == NULL) {
-        perror("Could not open file");
-        return NULL;
-    }
-
-    size_t read, filesize = fileinfo.fi_size;
+git_obj_blob *create_blob_from_file(const fileinfo *finfo) {
+    size_t read, filesize = finfo->stat.fi_size;
     unsigned char *buf = malloc(filesize);
 
     git_obj_blob *blob = NULL;
-    size_t norm_size = read_bytes_norm(buf, filesize, fptr, &read);
+    size_t norm_size = read_bytes_norm(buf, filesize, finfo->fptr, &read);
     if (read != filesize) {
         goto cleanup;
     }
@@ -172,7 +160,6 @@ git_obj_blob *create_blob_from_path(const char *filepath) {
     create_git_obj(buf, norm_size, O_TYPE_BLOB, &(blob->obj));
 
 cleanup:
-    fs_fclose(fptr);
     free(buf);
     return blob;
 }
@@ -270,13 +257,13 @@ size_t obj_uncompressed_size(const unsigned char *raw_bytes, size_t raw_size) {
 unsigned char *read_raw_data(const char *path, size_t *raw_size) {
     size_t size;
     FILE *fptr;
-    fs_fileinfo fileinfo;
+    fs_statinfo statinfo;
 
-    if (fs_getinfo(path, &fileinfo) == -1) {
+    if (fs_getinfo(path, &statinfo) == -1) {
         return NULL;
     }
 
-    size = fileinfo.fi_size;
+    size = statinfo.fi_size;
 
     if ((fptr = fs_fopen(path, "rb")) == NULL) {
         return NULL;
@@ -460,78 +447,6 @@ int add_tree_entry(git_tree_entry *entry, git_obj_tree *tree) {
     return 0;
 }
 
-int create_tree_entries(DIR *dir, const char *folderpath, git_obj_tree *tree) {
-    int rc = 0;
-    fs_dirent *ent;
-    while ((ent = fs_readdir(dir, folderpath)) != NULL) {
-        if (strcmp(ent->de_name, ".") == 0 || strcmp(ent->de_name, "..") == 0) {
-            continue;
-        }
-
-        git_tree_entry *tree_ent = malloc(sizeof(*tree_ent));
-        snprintf(tree_ent->name, PATH_MAX, "%s", ent->de_name);
-        tree_ent->git_mode = stat_mode_to_git(ent->de_mode);
-
-        if (ent->de_type == FS_ISFILE) {
-            if ((tree_ent->u.blob = create_blob_from_path(ent->de_path)) == NULL) {
-                free(tree_ent);
-                rc = -1;
-                break;
-            }
-
-            tree_ent->type = BLOB_OBJ;
-        } else if (ent->de_type == FS_ISDIR) {
-            // NOTE: CANNOT just pass ent->de_path. 
-            // ent is a static struct which means ent->path will be overwritten by recursive call
-            char subpath[PATH_MAX];
-            snprintf(subpath, PATH_MAX, "%s", ent->de_path);
-            if ((tree_ent->u.tree = create_tree_from_path(subpath)) == NULL) {
-                free(tree_ent);
-                continue;
-            }
-
-            tree_ent->type = TREE_OBJ;
-        }
-
-        if (add_tree_entry(tree_ent, tree) != 0) {
-            free_tree_entry(tree_ent);
-            rc = -1;
-            break;
-        }
-    }
-
-    if (tree->size == 0) {
-        return -1;
-    }
-
-    if (rc == -1) {
-        free_tree(tree);
-    }
-
-    return rc;
-}
-
-// technically not needed; trees are made from entries in index
-git_obj_tree *create_tree_from_path(const char *folderpath) {
-    DIR *dir;
-    if ((dir = fs_opendir(folderpath)) == NULL) {
-        perror("could not open directory");
-        return NULL;
-    }
-
-    git_obj_tree *tree = init_tree();
-    int ok = create_tree_entries(dir, folderpath, tree) == 0;
-    fs_closedir(dir);
-    if (!ok) {
-        return NULL;
-    }
-
-    qsort(tree->entries, tree->size, sizeof(git_tree_entry *), cmp_tree_entries);
-    hash_tree_full(tree);
-
-    return tree;
-}
-
 int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree) {
     for (int i = 0; i < tree->size; i++) {
         int ok = -1;
@@ -650,21 +565,89 @@ int tree_find(const git_obj_tree *tree, obj_hash hash, git_tree_entry *obj, char
     return 0;
 }
 
-git_obj_blob **tree_get_blobs(git_obj_tree *tree, char *regex_filter, int *size) {
-    (void)tree;
-    (void)regex_filter;
-    (void)size;
-    return NULL;
-}
-
 int delete_obj_from_disk(obj_hash hash) {
     (void)hash;
     return 0;
 }
 
-int get_obj_contents(obj_hash hash, char *buf, int buf_size) {
-    (void)hash;
-    (void)buf;
-    (void)buf_size;
-    return 0;
+int create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, git_obj_tree *tree) {
+    int rc = 0;
+    fs_dirent *ent;
+    while ((ent = fs_readdir(dir, folderpath)) != NULL) {
+        if (strcmp(ent->de_name, ".") == 0 || strcmp(ent->de_name, "..") == 0) {
+            continue;
+        }
+
+        git_tree_entry *tree_ent = malloc(sizeof(*tree_ent));
+        snprintf(tree_ent->name, PATH_MAX, "%s", ent->de_name);
+        tree_ent->git_mode = stat_mode_to_git(ent->de_mode);
+
+        if (ent->de_type == FS_ISFILE) {
+            fileinfo *finfo;
+            if ((finfo = start_fileinfo(repo, ent->de_path, "rb")) == NULL) {
+                free(tree_ent);
+                rc = -1;
+                break;
+            }
+
+            if ((tree_ent->u.blob = create_blob_from_file(finfo)) == NULL) {
+                end_fileinfo(finfo);
+                free(tree_ent);
+                rc = -1;
+                break;
+            }
+
+            end_fileinfo(finfo);
+            tree_ent->type = BLOB_OBJ;
+        } else if (ent->de_type == FS_ISDIR) {
+            // NOTE: CANNOT just pass ent->de_path. 
+            // ent is a static struct which means ent->path will be overwritten by recursive call
+            char subpath[PATH_MAX];
+            snprintf(subpath, PATH_MAX, "%s", ent->de_path);
+            if ((tree_ent->u.tree = create_tree_from_path(repo, subpath)) == NULL) {
+                free(tree_ent);
+                continue;
+            }
+
+            tree_ent->type = TREE_OBJ;
+        }
+
+        if (add_tree_entry(tree_ent, tree) != 0) {
+            free_tree_entry(tree_ent);
+            rc = -1;
+            break;
+        }
+    }
+
+    if (tree->size == 0) {
+        return -1;
+    }
+
+    if (rc == -1) {
+        free_tree(tree);
+    }
+
+    return rc;
 }
+
+// technically not needed; trees are made from entries in index
+git_obj_tree *create_tree_from_path(const git_repo *repo, const char *folderpath) {
+    DIR *dir;
+    if ((dir = fs_opendir(folderpath)) == NULL) {
+        perror("could not open directory");
+        return NULL;
+    }
+
+    git_obj_tree *tree = init_tree();
+    int ok = create_tree_entries(repo, dir, folderpath, tree) == 0;
+    fs_closedir(dir);
+    if (!ok) {
+        return NULL;
+    }
+
+    qsort(tree->entries, tree->size, sizeof(git_tree_entry *), cmp_tree_entries);
+    hash_tree_full(tree);
+
+    return tree;
+}
+

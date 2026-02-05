@@ -2,7 +2,9 @@
 #define GIT_OBJECTS_H
 
 #include <time.h>
+
 #include "repo.h"
+#include "filespec.h"
 
 #define O_TYPE_BLOB "blob"
 #define O_TYPE_TREE "tree"
@@ -51,6 +53,9 @@ typedef struct git_obj_commit {
     char *msg;
 } git_obj_commit;
 
+void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash);
+
+void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes);
 
 void free_blob(git_obj_blob *);
 
@@ -59,7 +64,7 @@ void print_tree(git_obj_tree *);
 
 // Inits blob struct representing `filepath`.
 // @return pointer to blob or NULL on failure
-git_obj_blob *create_blob_from_path(const char *filepath);
+git_obj_blob *create_blob_from_file(const fileinfo *);
 
 // Creates blob struct from blob file. 
 // @return pointer to blob or NULL if could not read file.
@@ -78,19 +83,17 @@ void free_tree(git_obj_tree *);
 
 void free_tree_entry(git_tree_entry *);
 
-// Inits tree struct representing `folderpath`. Recursively creates tree for subfolders and blobs for files.
-// @return pointer to tree or NULL if failure
-git_obj_tree *create_tree_from_path(const char *folderpath);
-
 // Creates tree struct from tree file.
 // @return pointer to tree or NULL if could not read file.
 git_obj_tree *create_tree_from_disk(const git_repo *repo, obj_hash hash);
 
 git_obj_tree *init_tree();
 
+// calculates object hash for tree struct and its subtree.
 void hash_tree_full(git_obj_tree *tree);
 
 int add_tree_entry(git_tree_entry *entry, git_obj_tree *tree);
+
 // Creates tree file and files for all of its sub-trees and blobs in objects folder.
 // Skips trees and blobs that already exist in objects folder.
 // @return 0 if successful, -1 otherwise.
@@ -117,12 +120,8 @@ int tree_cmp(git_obj_tree *, git_obj_tree *, const char *);
 // @return 0 on success, -1 otherwise.
 int delete_obj_from_disk(obj_hash hash);
 
-// Reads object's contents as text in objects folder, filling `buf` with its contents.
-// @return 0 on success, -1 otherwise
-int get_obj_contents(obj_hash hash, char *buf, int buf_size);
-
-void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash);
-
-void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes);
+// Inits tree struct representing `folderpath`. Recursively creates tree for subfolders and blobs for files.
+// @return pointer to tree or NULL if failure
+git_obj_tree *create_tree_from_path(const git_repo *, const char *folderpath);
 
 #endif

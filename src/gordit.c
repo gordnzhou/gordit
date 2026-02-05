@@ -8,10 +8,7 @@
 #include "objects.h" 
 #include "repo.h"
 #include "dircache.h"
-
-char **parse_file_args(const char **args, int num_args) {
-    
-}
+#include "filespec.h"
 
 int main(int argc, char* argv[]) {
     if (argc <= 1) {
@@ -50,61 +47,53 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    if (strcmp(command, "add") == 0) {
+    if (strcmp(command, "add") == 0 || strcmp(command, "rm") == 0) {
         if (argc <= 2) {
-            printf("Nothing was specified to be added.\n");
+            printf("No files specified, nothing changed.\n");
             goto end;
         }
-
         int num_args = argc - 2;
-        char **args = argv + 2;
-        char **paths = malloc(num_args * sizeof(char *));
-        for (int i = 0; i < num_args; i++) {
-            char *temp = malloc(PATH_MAX);
-            int ok = 1;
-            if (strlen(args[i]) + 1 > PATH_MAX || fs_path_abs(args[i], temp) || !fs_file_exists(temp)) {
-                printf("ERROR: could not find file: %s\n", args[i]);
-                ok = 0;
-            }
-            if (!is_path_in_repo(repo, temp)) {
-                printf("ERROR: file is not part of repo: %s\n", args[i]);
-                ok = 0;
-            }
-
-            if (!ok) {
-                for (int j = 0; j < i; j++) {
-                    free(paths[j]);
-                }
-                free(temp);
-                free(paths);
-                ret_code = 1;
-                goto end;
-            }
-
-            paths[i] = temp;
+        if (!is_file_args_valid(repo, argv + 2, num_args)) { 
+            ret_code = 1;
+            goto end;
         }
 
         git_dircache *dircache = create_dircache(repo);
         for (int i = 0; i < num_args; i++) {
-            // TODO: move file and stat handling, especially those from paths passed as arguments
-            // to outside as much as possible so that file errors get handled ASAP
-            if (add_file_to_dc(repo, dircache, paths[i]) != 0) {
-                printf("ERROR: could not add file: %s\n", paths[i]);
+            struct fileinfo *info;
+            if ((info = start_fileinfo(repo, argv[2 + i], "rb")) == NULL) {
+                ret_code = 1;
+                printf("ERROR: could not open file: %s\n", argv[2 + i]);
                 goto add_end;
             }
+
+            if (strcmp(command, "add") == 0 && is_file_ignored(repo, info)) {
+                printf("NOTE: file is ignored: %s\n", argv[2 + i]);
+                continue;
+            }
+            
+            if (strcmp(command, "add") == 0) {
+                if (add_file_to_dc(dircache, info) != 0) {
+                    printf("ERROR: could not add file: %s\n", argv[2 + i]);
+                    end_fileinfo(info);
+                    goto add_end;
+                }
+            } else {
+                if (remove_file_from_dc(dircache, info) != 0) {
+                    printf("ERROR: could not find file: %s\n", argv[2 + i]);
+                    end_fileinfo(info);
+                    goto add_end;
+                }
+            }
+
+            end_fileinfo(info);
         }
 
         write_index(repo, dircache); 
         print_dircache(dircache); 
 
 add_end:;  
-        for (int j = 0; j < num_args; j++) {
-            free(paths[j]);
-        }
-        free(paths);
         free_dircache(dircache);  
-    } else if (strcmp(command, "rm")) {
-        
     } else if (strcmp(command, "commit") == 0) {
 
     } else {

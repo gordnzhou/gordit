@@ -21,6 +21,8 @@ typedef char obj_hash[OBJ_HASH_SIZE];
 #define HEAD_PATH GIT_FOLDER "/" HEAD_NAME
 #define INDEX_PATH GIT_FOLDER "/" INDEX_NAME
 
+#define GIT_IGNORE_NAME ".gorditignore"
+
 typedef struct {
     char root_path[PATH_MAX];
     char ref_path[PATH_MAX];

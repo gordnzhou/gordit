@@ -25,7 +25,7 @@
 #define fs_getcwd getcwd
 #define fs_closedir closedir
 
-typedef struct fs_fileinfo {
+typedef struct fs_statinfo {
     size_t fi_size;
     unsigned int fi_mode;
     time_t fi_atime;
@@ -35,7 +35,7 @@ typedef struct fs_fileinfo {
     ino_t fi_ino;
     unsigned int fi_uid;
     unsigned int fi_gid;
-} fs_fileinfo;
+} fs_statinfo;
 
 #define FS_ISFILE 1
 #define FS_ISDIR 0
@@ -50,7 +50,7 @@ typedef struct fs_dirent {
 } fs_dirent;
 
 // Wrapper around `readdir` that has more guaranteed fields.
-fs_dirent *fs_readdir(DIR *, const char *);
+fs_dirent *fs_readdir(DIR *, const char *directory_path);
 
 // Same as `mkdir` in POSIX. Note: mode is ignored on Win32.
 // @return 1 if folder already exists, 0 on success, otherwise -1
@@ -61,7 +61,7 @@ DIR * fs_opendir(const char *);
 
 // Same as `stat()` function in POSIX 
 // @return 0 on success, otherwise -1
-int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo);
+int fs_getinfo(const char *path, struct fs_statinfo *statinfo);
 
 // @brief Gets path in absolute form.  
 // @return 0 on success, otherwise -1.

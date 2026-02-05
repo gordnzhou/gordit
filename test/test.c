@@ -8,6 +8,7 @@
 #include "filesystem.h"
 #include "objects.h"
 #include "dircache.h"
+#include "filespec.h"
 
 #define ASSERT_STREQ(act, exp) \
     if (strcmp(exp, act) != 0) { \
@@ -101,7 +102,10 @@ void test_objects(const git_repo *repo) {
     char *hash;
     git_obj_blob *blob, *blob2;
 
-    blob = create_blob_from_path("notes.md");
+    fileinfo *info = start_fileinfo(repo, "notes.md", "rb");
+    assert(info != NULL);
+    blob = create_blob_from_file(info);
+    end_fileinfo(info);
     assert(blob != NULL);
     ASSERT_STREQ(blob->obj.type, "blob")
     hash = blob->obj.hash;
@@ -121,7 +125,7 @@ void test_objects(const git_repo *repo) {
     char path2[] = "./include";
     git_obj_tree *tree, *tree2;
 
-    tree = create_tree_from_path(path2);
+    tree = create_tree_from_path(repo, path2);
     assert(tree != NULL);
     assert(tree->size > 0);
     printf("hash of tree: %s\n", tree->obj.hash);
@@ -149,11 +153,12 @@ void test_index(const git_repo * repo) {
     print_dircache(dircache);
 
     char *path = "build/test.o";
-    char abs_path[PATH_MAX];
-    assert(fs_path_abs(path, abs_path) == 0);
-    printf("adding %s to index...\n", abs_path);
+    printf("adding %s to index...\n", path);
 
-    assert(add_file_to_dc(repo, dircache, abs_path) == 0);
+    struct fileinfo *info = start_fileinfo(repo, path, "rb");
+    assert(info != NULL);
+    assert(add_file_to_dc(dircache, info) == 0);
+    end_fileinfo(info);
 
     print_dircache(dircache);
 
@@ -168,7 +173,7 @@ void test_index(const git_repo * repo) {
     assert(tree != NULL);
     print_tree(tree);
 
-    assert(remove_file_from_dc(repo, dircache, abs_path) != -1);
+    assert(remove_file_from_dc(dircache, info) != -1);
 
     // assert(write_index(repo, dircache) == 0);
 
@@ -178,9 +183,14 @@ void test_index(const git_repo * repo) {
 }
 
 int main() {
-    int is_error;
-    const git_repo *repo = get_working_repo(&is_error);
-    assert(is_error == 0 && "Cannot get repo"); 
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        perror("getcwd() error");
+        return 1;
+    }
+    
+    const git_repo *repo = get_working_repo(cwd);
+    assert(repo != NULL && "Cannot get repo"); 
 
     test_filesystem();
     test_objects(repo);

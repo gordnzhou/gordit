@@ -76,19 +76,19 @@ fs_dirent *fs_readdir(DIR *dir, const char *foldername){
     return &ret;
 }
 
-int fs_getinfo(const char *path, struct fs_fileinfo *fileinfo) {
+int fs_getinfo(const char *path, struct fs_statinfo *statinfo) {
     struct stat st;
     int result = stat(path, &st);
 
-    fileinfo->fi_atime = st.st_atime;
-    fileinfo->fi_mtime = st.st_mtime;
-    fileinfo->fi_ctime = st.st_ctime;
-    fileinfo->fi_dev = st.st_dev;
-    fileinfo->fi_gid = st.st_gid;
-    fileinfo->fi_ino = st.st_ino;
-    fileinfo->fi_mode = st.st_mode;
-    fileinfo->fi_size = st.st_size;
-    fileinfo->fi_uid = st.st_uid;
+    statinfo->fi_atime = st.st_atime;
+    statinfo->fi_mtime = st.st_mtime;
+    statinfo->fi_ctime = st.st_ctime;
+    statinfo->fi_dev = st.st_dev;
+    statinfo->fi_gid = st.st_gid;
+    statinfo->fi_ino = st.st_ino;
+    statinfo->fi_mode = st.st_mode;
+    statinfo->fi_size = st.st_size;
+    statinfo->fi_uid = st.st_uid;
 
     return result;
 }
@@ -165,7 +165,7 @@ int fs_path_dirname(const char* path, char *out) {
     }
 
 end:
-    return strchr(path, '/') == NULL & strchr(path, '\\') == NULL;
+    return strchr(path, '/') == NULL && strchr(path, '\\') == NULL;
 }
 
 void fs_path_basename(const char* path, char *out) {

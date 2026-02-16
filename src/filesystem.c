@@ -43,6 +43,10 @@ DIR *fs_opendir(const char *path) {
     return opendir(copy); 
 }
 
+int fs_closedir(DIR *dir) {
+    return closedir(dir);
+}
+
 static fs_dirent ret;
 static struct stat st;
 
@@ -120,12 +124,20 @@ void fs_path_join(const char *path1, const char *path2, char *out) {
     char *sep = "/";
 
     int len1 = strlen(path1);
-    if (len1 > 0 && out[len1 - 1] == '\\' && out[len1 - 1] == '/') sep = "";
+    if (len1 > 0 && (path1[len1 - 1] == '\\' || path1[len1 - 1] == '/')) sep = "";
     
     const char *p2 = path2;
     if (*p2 == '\\' || *p2 == '/') p2++;
     
     snprintf(out, PATH_MAX, "%s%s%s", path1, sep, p2);
+}
+
+void fs_clean_path(char *path) {
+    for (int i = 0; i < PATH_MAX && path[i] != '\0'; i++) {
+        if (path[i] == '/' || path[i] == '\\') {
+            path[i] = PATH_SEP;
+        }
+    }
 }
 
 #ifdef _WIN32

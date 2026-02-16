@@ -38,16 +38,15 @@ git_dircache *create_dircache(const git_repo *);
 // if file is aready in index, updates it only if stat info has changed
 int add_file_to_dc(git_dircache *, const fileinfo *);
 
-// adds entry to repo's index. entry must be of a blob!
-int add_tree_entry_to_dc(const git_repo *, git_dircache *, git_tree_entry *);
-
 // removes file's entries from repo's index.
 // @param filepath ASSUME it is a unix path relative to repo root
 // @return 0 if removed, -1 if not in index
 int remove_file_from_dc(git_dircache *, const fileinfo *);
 
-int write_index(const git_repo *, git_dircache *);
+void write_index(const git_repo *, git_dircache *);
 
 git_obj_tree *build_tree_from_index(git_dircache *);
+
+int dircache_has_conflicts(git_dircache *);
 
 #endif

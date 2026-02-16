@@ -42,20 +42,13 @@ typedef struct git_obj_tree {
     int capacity;
 } git_obj_tree;
 
-typedef struct git_obj_commit {
-    git_obj obj;
-    git_obj_tree *tree;
-    time_t timestamp;
-    int p_count; // number of parent commits
-    struct git_obj_commit **parents;
-    char *author;
-    char *commiter;
-    char *msg;
-} git_obj_commit;
-
 void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash);
 
 void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes);
+
+void free_obj(git_obj *obj);
+
+void create_git_obj(const unsigned char *file_contents, size_t size, const char *type, git_obj *obj);
 
 void free_blob(git_obj_blob *);
 
@@ -70,9 +63,8 @@ git_obj_blob *create_blob_from_file(const fileinfo *);
 // @return pointer to blob or NULL if could not read file.
 git_obj_blob *create_blob_from_disk(const git_repo * repo, obj_hash);
 
-// Creates blob file in objects folder, if it does not already exist.
-// @return 0 if successful, -1 otherwise.
-int write_blob_to_disk(const git_repo *, const git_obj_blob *);
+// @return 0 if obj was successfully stored, -1 if unable to
+int write_obj_to_disk(const git_repo *repo, const git_obj *obj);
 
 // Transform blob object to its original file and saves it to `filepath`.
 // Assumes directory already exists
@@ -92,7 +84,7 @@ git_obj_tree *init_tree();
 // calculates object hash for tree struct and its subtree.
 void hash_tree_full(git_obj_tree *tree);
 
-int add_tree_entry(git_tree_entry *entry, git_obj_tree *tree);
+void add_tree_entry(git_tree_entry *entry, git_obj_tree *tree);
 
 // Creates tree file and files for all of its sub-trees and blobs in objects folder.
 // Skips trees and blobs that already exist in objects folder.

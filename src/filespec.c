@@ -1,21 +1,21 @@
 
 #include "filespec.h"
+#include "logging.h"
+#include "utils.h"
 
 int is_file_args_valid(const git_repo *repo, char **args, int num_args) {
     for (int i = 0; i < num_args; i++) {
-        char *temp = malloc(PATH_MAX);
-        int ok = 1;
+        char *temp = smalloc(PATH_MAX);
+        int ok = 0;
         if (strlen(args[i]) + 1 > PATH_MAX || fs_path_abs(args[i], temp) || !fs_file_exists(temp)) {
-            printf("ERROR: could not find file: %s\n", args[i]);
-            ok = 0;
+            ok = error("could not find file: %s", args[i]);
         }
         if (!is_path_in_repo(repo, temp)) {
-            printf("ERROR: file is not part of repo: %s\n", args[i]);
-            ok = 0;
+            ok = error("file is not inside of repository: %s\n", args[i]);
         }
         free(temp);
 
-        if (!ok) {
+        if (ok < 0) {
             return 0;
         }
     }
@@ -32,7 +32,7 @@ struct fileinfo *start_fileinfo(const git_repo *repo, const char *path, const ch
         return NULL;
     }
 
-    if ((info.fptr = fs_fopen(path, mode)) == NULL) {
+    if ((info.fptr = fopen(path, mode)) == NULL) {
         return NULL;
     }
 
@@ -40,7 +40,7 @@ struct fileinfo *start_fileinfo(const git_repo *repo, const char *path, const ch
 }
 
 void end_fileinfo(struct fileinfo *info) {
-    fs_fclose(info->fptr);
+    fclose(info->fptr);
 }
 
 // TODO: expand spec syntax beyond just filename
@@ -67,20 +67,20 @@ int check_ignores(const char *folder, const struct fileinfo *info, const git_rep
     char line[PATH_MAX];
     while ((ent = fs_readdir(dir, folder)) != NULL) {
         if (strcmp(ent->de_name, GIT_IGNORE_NAME) == 0) {
-            FILE *fptr = fs_fopen(ent->de_path, "r");
+            FILE *fptr = fopen(ent->de_path, "r");
             if (fptr == NULL) {
                 retval = -1;
                 goto cleanup;
             }
 
-            while (fs_readline(line, PATH_MAX, fptr) != NULL) {
+            while (fgets(line, PATH_MAX, fptr) != NULL) {
                 if (file_matches_spec(folder, info->path, line)) {
-                    fs_fclose(fptr);
+                    fclose(fptr);
                     return 1;
                 }
             }
 
-            fs_fclose(fptr);
+            fclose(fptr);
         }
     }
 

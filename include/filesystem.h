@@ -12,18 +12,11 @@
     #define PATH_MAX 4096
 #endif
 
-#define fs_fopen fopen
-#define fs_fclose fclose
-#define fs_rename rename
-#define fs_remove remove
-
-#define fs_readbytes fread
-#define fs_writebytes fwrite
-#define fs_readline fgets
-#define fs_writeline fputs
-
-#define fs_getcwd getcwd
-#define fs_closedir closedir
+#ifdef _WIN32 
+    #define PATH_SEP '\\'
+#else
+    #define PATH_SEP '/'
+#endif
 
 typedef struct fs_statinfo {
     size_t fi_size;
@@ -58,6 +51,10 @@ int fs_mkdir(const char *, mode_t);
 
 // Same as `opendir` in POSIX, except path is const
 DIR * fs_opendir(const char *);
+
+int fs_closedir(DIR *);
+
+void fs_clean_path(char *path);
 
 // Same as `stat()` function in POSIX 
 // @return 0 on success, otherwise -1

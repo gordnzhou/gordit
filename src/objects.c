@@ -9,6 +9,8 @@
 #include "filesystem.h"
 #include "objects.h"
 #include "filespec.h"
+#include "logging.h"
+#include "utils.h"
 
 #define CRLF_LF_ON 1
 
@@ -37,7 +39,7 @@ void print_tree_recur(git_obj_tree *tree, const char *prefix) {
         } else {
             printf("(%s)\n", entry->u.tree->obj.hash);
             int len = strlen(prefix) + strlen(INDENT) + 1;
-            char *new_prefix = malloc(len);
+            char *new_prefix = smalloc(len);
             snprintf(new_prefix, len, "%s%s", prefix, INDENT);
             print_tree_recur(entry->u.tree, new_prefix);
             free(new_prefix);
@@ -47,19 +49,6 @@ void print_tree_recur(git_obj_tree *tree, const char *prefix) {
 
 void print_tree(git_obj_tree *tree) {
     print_tree_recur(tree, "");
-}
-
-void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash) {
-    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        snprintf(*out_hash + (i << 1), OBJ_HASH_SIZE, "%02x", bytes[i]);
-    } 
-}
-
-void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes) {
-    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        char hex[3] = {hash[i << 1], hash[(i << 1) + 1], '\0'};
-        sscanf(hex, "%2hhx", &out_bytes[i]);
-    }
 }
 
 int is_like_binary(FILE *fptr) {
@@ -80,7 +69,7 @@ size_t read_bytes_norm(unsigned char *buf, size_t buf_size, FILE *fptr, size_t *
     size_t read_and_used = 0; 
 
     if (is_binary || !CRLF_LF_ON) {
-        *read = fs_readbytes(buf, 1, buf_size, fptr);
+        *read = fread(buf, 1, buf_size, fptr);
         return *read;
     }
 
@@ -125,6 +114,18 @@ size_t write_norm_bytes(unsigned char *buf, size_t buf_size, FILE *fptr) {
     return i;
 }
 
+void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash) {
+    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        snprintf(*out_hash + (i << 1), OBJ_HASH_SIZE, "%02x", bytes[i]);
+    } 
+}
+
+void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes) {
+    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        char hex[3] = {hash[i << 1], hash[(i << 1) + 1], '\0'};
+        sscanf(hex, "%2hhx", &out_bytes[i]);
+    }
+}
 void hash_data(unsigned char *data, size_t size, obj_hash *o_hash) {
     unsigned char hash[SHA_DIGEST_LENGTH];
     SHA1(data, size, hash);
@@ -138,7 +139,7 @@ void create_git_obj(const unsigned char *file_contents, size_t size, const char 
 
     obj->type = type;
     obj->size = header_size + size;
-    obj->data = malloc(header_size + size);
+    obj->data = smalloc(header_size + size);
 
     memcpy(obj->data, header, header_size);
     memcpy(obj->data + header_size, file_contents, size);
@@ -148,7 +149,7 @@ void create_git_obj(const unsigned char *file_contents, size_t size, const char 
 
 git_obj_blob *create_blob_from_file(const fileinfo *finfo) {
     size_t read, filesize = finfo->stat.fi_size;
-    unsigned char *buf = malloc(filesize);
+    unsigned char *buf = smalloc(filesize);
 
     git_obj_blob *blob = NULL;
     size_t norm_size = read_bytes_norm(buf, filesize, finfo->fptr, &read);
@@ -156,7 +157,7 @@ git_obj_blob *create_blob_from_file(const fileinfo *finfo) {
         goto cleanup;
     }
 
-    blob = malloc(sizeof(*blob));
+    blob = smalloc(sizeof(*blob));
     create_git_obj(buf, norm_size, O_TYPE_BLOB, &(blob->obj));
 
 cleanup:
@@ -164,46 +165,35 @@ cleanup:
     return blob;
 }
 
-int write_compressed_data(const char *path, const unsigned char *data, size_t size) {
-    FILE *fptr;
-    if ((fptr = fs_fopen(path, "wb")) == NULL) {
-        return -1;
-    }
+void write_compressed_data(const char *path, const unsigned char *data, size_t size) {
+    FILE *fptr = sfopen(path, "wb");
 
     uLong buf_len = compressBound(size);
-    size_t written = 0;
-    Bytef *buf = malloc(buf_len);
+    Bytef *buf = smalloc(buf_len);
     if (compress(buf, &buf_len, data, size) != Z_OK) {
-        goto cleanup;
+        fatal("could not compress object: %s\n", path);
     }
 
-    written = fs_writebytes(buf, 1, buf_len, fptr);
-
-cleanup:
-    fs_fclose(fptr);
+    fwriteb_full(buf, buf_len, fptr, path);
+    fclose(fptr);
     free(buf);
-
-    return (written == buf_len) ? 0 : -1;
 }
 
-// @return 0 if obj was successfully stored, -1 if unable to
-int write_obj_to_disk(const git_repo *repo, const obj_hash hash, const unsigned char *data, size_t size) {
+int write_obj_to_disk(const git_repo *repo, const git_obj *obj) {
     char path[PATH_MAX];
-    int status = obj_store_path(repo, hash, path);
+    int status = obj_store_path(repo, obj->hash, path);
 
     if (status == 1) {
         return 0;
     }
-    if (status == -1 || write_compressed_data(path, data, size) != 0) {
-        printf("ERROR: could not save hash: %s\n", hash);
+    if (status == -1) {
+        printf("ERROR: could not save hash: %s\n", obj->hash);
         return -1;
     } 
+
+    write_compressed_data(path, obj->data, obj->size);
     
     return 0;
-}
-
-int write_blob_to_disk(const git_repo *repo, const git_obj_blob *blob) {
-    return write_obj_to_disk(repo, blob->obj.hash, blob->obj.data, blob->obj.size);
 }
 
 size_t obj_uncompressed_size(const unsigned char *raw_bytes, size_t raw_size) {
@@ -265,18 +255,11 @@ unsigned char *read_raw_data(const char *path, size_t *raw_size) {
 
     size = statinfo.fi_size;
 
-    if ((fptr = fs_fopen(path, "rb")) == NULL) {
-        return NULL;
-    }
-
-    unsigned char *raw_buf = malloc(size);
-    size_t read = fread(raw_buf, 1, size, fptr);
-    if (read != size) {
-        free(raw_buf);
-        raw_buf = NULL;
-    }
-
-    fs_fclose(fptr);
+    unsigned char *raw_buf = smalloc(size);
+    
+    fptr = sfopen(path, "rb");
+    freadb_full(raw_buf, size, fptr, path);
+    fclose(fptr);
 
     *raw_size = size;
     return raw_buf;
@@ -300,7 +283,7 @@ unsigned char *create_obj_from_disk(const git_repo *repo, const obj_hash hash, s
         return NULL;
     }
     
-    data = malloc(full_size);
+    data = smalloc(full_size);
     if (uncompress(data, (uLongf *)(&full_size), (Bytef *)raw_buf, raw_size) != Z_OK) {
         free(data);
         free(raw_buf);
@@ -326,7 +309,7 @@ int is_header_type_matches(const unsigned char *data, const char *type) {
 }
 
 git_obj_blob *create_blob_from_disk(const git_repo *repo, obj_hash hash) {
-    git_obj_blob *blob = malloc(sizeof(*blob));
+    git_obj_blob *blob = smalloc(sizeof(*blob));
     blob->obj.type = O_TYPE_BLOB;
     snprintf(blob->obj.hash, PATH_MAX, "%s", hash);
 
@@ -346,24 +329,25 @@ git_obj_blob *create_blob_from_disk(const git_repo *repo, obj_hash hash) {
 }
 
 int create_file_from_blob(const char *filepath, const git_obj_blob *blob) {
-    FILE *fptr;
-    if ((fptr = fs_fopen(filepath, "wb")) == NULL) {
-        perror("Error opening file");
-        return -1;
-    }
+    FILE *fptr = sfopen(filepath, "wb");
     
     unsigned char *start;
     if ((start = (unsigned char *)strchr((char *)blob->obj.data, '\0')) == NULL) {
-        fs_fclose(fptr);
-        return 1;
+        fclose(fptr);
+        return -1;
     }
     start++;
 
     size_t size = blob->obj.size - (start - blob->obj.data);
     size_t written = write_norm_bytes(start, size, fptr);
-    fs_fclose(fptr);
+    fclose(fptr);
      
-    return written >= size ? 0 : 1;
+    return written >= size ? 0 : -1;
+}
+
+void free_obj(git_obj *obj) {
+    free(obj->data);
+    free(obj);
 }
 
 void free_blob(git_obj_blob *blob) {
@@ -381,7 +365,7 @@ int cmp_tree_entries(const void *p1, const void *p2) {
 #define MAX_TREE_ENTRY_LINE 54 + PATH_MAX
 
 void hash_tree_full(git_obj_tree *tree) {
-    unsigned char *buf = malloc(tree->size * MAX_TREE_ENTRY_LINE);
+    unsigned char *buf = smalloc(tree->size * MAX_TREE_ENTRY_LINE);
     size_t content_size = 0;
 
     for (int i = 0; i < tree->size; i++) {
@@ -404,9 +388,9 @@ void hash_tree_full(git_obj_tree *tree) {
 }
 
 git_obj_tree *init_tree() {
-    git_obj_tree *tree = malloc(sizeof(*tree));
+    git_obj_tree *tree = smalloc(sizeof(*tree));
     tree->size = 0;
-    tree->entries = malloc(sizeof(git_tree_entry *));
+    tree->entries = smalloc(sizeof(git_tree_entry *));
     tree->capacity = 1;
     tree->obj.data = NULL;
     return tree;
@@ -432,19 +416,13 @@ void free_tree(git_obj_tree *tree) {
     free(tree);
 }
 
-int add_tree_entry(git_tree_entry *entry, git_obj_tree *tree) {
+void add_tree_entry(git_tree_entry *entry, git_obj_tree *tree) {
     if (tree->size >= tree->capacity) {
-        git_tree_entry **tmp;
-        if ((tmp = realloc(tree->entries, 2 * tree->capacity * sizeof(git_tree_entry *))) == NULL) {
-            perror("could not realloc");
-            return -1;
-        }
         tree->capacity *= 2;
-        tree->entries = tmp;
+        tree->entries = srealloc(tree->entries, tree->capacity * sizeof(git_tree_entry *));
     }
 
     tree->entries[tree->size++] = entry;
-    return 0;
 }
 
 int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree) {
@@ -453,7 +431,7 @@ int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree) {
         git_tree_entry *entry = tree->entries[i];
         switch (entry->type) {
             case BLOB_OBJ:
-                ok = write_blob_to_disk(repo, entry->u.blob);
+                ok = write_obj_to_disk(repo, &(entry->u.blob->obj));
                 break;
             case TREE_OBJ:
                 ok = write_tree_to_disk(repo, entry->u.tree);
@@ -465,7 +443,7 @@ int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree) {
         }
     }
 
-    return write_obj_to_disk(repo, tree->obj.hash, tree->obj.data, tree->obj.size);
+    return write_obj_to_disk(repo, &(tree->obj));
 }
 
 int tree_cmp(struct git_obj_tree *old, struct git_obj_tree *new, const char *path) {
@@ -481,7 +459,7 @@ int parse_tree_entries(
     size_t entries_buf_length, 
     git_obj_tree *tree
 ) {
-    char *entries_copy = malloc(entries_buf_length + 1);
+    char *entries_copy = smalloc(entries_buf_length + 1);
     memcpy(entries_copy, entries_buf, entries_buf_length);
     entries_copy[entries_buf_length] = '\0';
 
@@ -492,7 +470,7 @@ int parse_tree_entries(
     while (line != NULL) {
         char *saveptr_fields = NULL;
 
-        git_tree_entry *entry = malloc(sizeof(*entry));
+        git_tree_entry *entry = smalloc(sizeof(*entry));
         entry->git_mode = atoi(strtok_r(line, " ", &saveptr_fields));
         char *type = strtok_r(NULL, " ", &saveptr_fields);
         char *hash = strtok_r(NULL, " ", &saveptr_fields);
@@ -514,12 +492,7 @@ int parse_tree_entries(
             }
         } 
 
-        if (add_tree_entry(entry, tree) != 0) {
-            free_tree_entry(entry);
-            rc = -1;
-            break;
-        }
-
+        add_tree_entry(entry, tree);
         line = strtok_r(NULL, "\n", &saveptr_lines);
     }
 
@@ -578,7 +551,7 @@ int create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, 
             continue;
         }
 
-        git_tree_entry *tree_ent = malloc(sizeof(*tree_ent));
+        git_tree_entry *tree_ent = smalloc(sizeof(*tree_ent));
         snprintf(tree_ent->name, PATH_MAX, "%s", ent->de_name);
         tree_ent->git_mode = stat_mode_to_git(ent->de_mode);
 
@@ -612,11 +585,7 @@ int create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, 
             tree_ent->type = TREE_OBJ;
         }
 
-        if (add_tree_entry(tree_ent, tree) != 0) {
-            free_tree_entry(tree_ent);
-            rc = -1;
-            break;
-        }
+        add_tree_entry(tree_ent, tree);
     }
 
     if (tree->size == 0) {

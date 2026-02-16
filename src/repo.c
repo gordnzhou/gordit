@@ -5,6 +5,8 @@
 #include "filesystem.h"
 #include "objects.h"
 #include "repo.h"
+#include "utils.h"
+#include "refs.h"
 
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int stat_mode_to_git(unsigned int st_mode) {
@@ -49,30 +51,13 @@ int git_find_root(const char *path, char *repo_root) {
     return git_find_root(parent, repo_root);
 }
 
-int git_init_repo(const char *cwd) {
-    char head_path[PATH_MAX];
-    fs_path_join(cwd, HEAD_PATH, head_path);
-
-    if (fs_file_exists(head_path) == 1) {
-        return 1;
-    }
-
-    if (fs_mkdir(GIT_FOLDER, 0700) == -1 ||
-        fs_mkdir(OBJS_FOLDER, 0700) == -1 ||
-        fs_mkdir(REFS_FOLDER, 0700) == -1) {
-        return -1;
-    }
-
-    FILE *fptr;
-    if ((fptr = fs_fopen(HEAD_PATH, "wb")) == NULL) {
-        return -1;
-    }
-
-    // TODO: make seperate HEAD and refs initialization function
-    fprintf(fptr, "refs: refs/heads/main");
-    fs_fclose(fptr);
-   
-    return 0;
+void init_repo_context(git_repo *repo, const char *repo_root) {
+    snprintf(repo->root_path, PATH_MAX, "%s", repo_root);
+    fs_path_join(repo_root, GIT_FOLDER, repo->git_folder_path);
+    fs_path_join(repo->git_folder_path, REFS_NAME, repo->refs_path);
+    fs_path_join(repo->git_folder_path, OBJS_NAME, repo->objects_path);
+    fs_path_join(repo->git_folder_path, INDEX_NAME, repo->index_path);
+    fs_path_join(repo->git_folder_path, HEAD_NAME, repo->head_path);
 }
 
 const git_repo *get_working_repo(const char *cwd) {
@@ -81,19 +66,39 @@ const git_repo *get_working_repo(const char *cwd) {
         return NULL;
     }
 
-    git_repo *repo = malloc(sizeof(*repo));
-
-    char git_folder_path[PATH_MAX];
-    fs_path_join(repo_root, GIT_FOLDER, git_folder_path);
-
-    strncpy(repo->root_path, repo_root, PATH_MAX);
-    fs_path_join(git_folder_path, REFS_NAME, repo->ref_path);
-    fs_path_join(git_folder_path, OBJS_NAME, repo->objects_path);
-    fs_path_join(git_folder_path, INDEX_NAME, repo->index_path);
-    fs_path_join(git_folder_path, HEAD_NAME, repo->head_path);
-
+    git_repo *repo = smalloc(sizeof(*repo));
+    init_repo_context(repo, repo_root);
     return repo;
 }
+
+int create_repo_folder(const char *cwd) {
+    git_repo *repo = smalloc(sizeof *repo);
+    init_repo_context(repo, cwd);
+
+    int exists = fs_file_exists(repo->head_path);
+
+    char local_refs_folder[PATH_MAX], tag_refs_folder[PATH_MAX];
+    fs_path_join(repo->root_path, LOCAL_REFS_FOLDER, local_refs_folder);
+    fs_path_join(repo->root_path, TAG_REFS_FOLDER, tag_refs_folder);
+
+    mode_t mode = 0700;
+    if (fs_mkdir(repo->git_folder_path, mode) == -1 ||
+        fs_mkdir(repo->objects_path, mode) == -1 ||
+        fs_mkdir(repo->refs_path, mode) == -1 ||
+        fs_mkdir(local_refs_folder, mode) == -1 ||
+        fs_mkdir(tag_refs_folder, mode) == -1) {
+        return -1;
+    }
+
+    if (!exists) {
+        move_head(repo, START_BRANCH);
+    }
+
+    free(repo);
+   
+    return exists;
+}
+
 
 int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
     char path2[OBJ_HASH_SIZE + 1];

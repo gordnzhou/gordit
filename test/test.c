@@ -9,6 +9,7 @@
 #include "objects.h"
 #include "dircache.h"
 #include "filespec.h"
+#include "utils.h"
 
 #define ASSERT_STREQ(act, exp) \
     if (strcmp(exp, act) != 0) { \
@@ -111,7 +112,7 @@ void test_objects(const git_repo *repo) {
     hash = blob->obj.hash;
     printf("hash of blob: %s\n", hash);
 
-    assert(write_blob_to_disk(repo, blob) == 0);
+    assert(write_obj_to_disk(repo, &(blob->obj)) == 0);
     
     blob2 = create_blob_from_disk(repo, hash);
     assert(blob2 != NULL);
@@ -175,7 +176,7 @@ void test_index(const git_repo * repo) {
 
     assert(remove_file_from_dc(dircache, info) != -1);
 
-    // assert(write_index(repo, dircache) == 0);
+    // write_index(repo, dircache);
 
     free_dircache(dircache);
     free_tree(tree);
@@ -184,10 +185,7 @@ void test_index(const git_repo * repo) {
 
 int main() {
     char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        perror("getcwd() error");
-        return 1;
-    }
+    sgetcwd(cwd, sizeof(cwd));
     
     const git_repo *repo = get_working_repo(cwd);
     assert(repo != NULL && "Cannot get repo"); 

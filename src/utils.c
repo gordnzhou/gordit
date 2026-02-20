@@ -69,7 +69,7 @@ void fwriteb_full(void *src, size_t filesize, FILE *file, const char *name) {
 }
 
 void sfputs(const char *str, FILE *file, const char *name) {
-    if (fputs(str, file) != 0) {
+    if (fputs(str, file) < 0) {
         fatal("could not write string to %s: %s", name, strerror(errno));
     }
 }

@@ -10,6 +10,7 @@
 #include "dircache.h"
 #include "filespec.h"
 #include "utils.h"
+#include "commit.h"
 
 #define ASSERT_STREQ(act, exp) \
     if (strcmp(exp, act) != 0) { \
@@ -101,29 +102,30 @@ void test_filesystem() {
 
 void test_objects(const git_repo *repo) {
     char *hash;
-    git_obj_blob *blob, *blob2;
+    git_obj *blob, *blob2;
 
     fileinfo *info = start_fileinfo(repo, "notes.md", "rb");
     assert(info != NULL);
     blob = create_blob_from_file(info);
     end_fileinfo(info);
     assert(blob != NULL);
-    ASSERT_STREQ(blob->obj.type, "blob")
-    hash = blob->obj.hash;
+    assert(blob->type == OBJ_TYPE_BLOB);
+    hash = blob->hash;
     printf("hash of blob: %s\n", hash);
 
-    assert(write_obj_to_disk(repo, &(blob->obj)) == 0);
+    assert(write_obj_to_disk(repo, blob) > 0);
     
-    blob2 = create_blob_from_disk(repo, hash);
+    blob2 = malloc(sizeof(*blob2));
+    create_obj_from_disk(blob2, repo, hash, OBJ_TYPE_BLOB);
     assert(blob2 != NULL);
-    ASSERT_STREQ(blob2->obj.hash, hash)
-    assert(blob2->obj.size == blob->obj.size);
+    ASSERT_STREQ(blob2->hash, hash)
+    assert(blob2->size == blob->size);
 
     assert(create_file_from_blob("build/notes.md", blob2) == 0);
     assert(fs_file_exists("build/notes.md") == 1);
     printf("================BLOB TESTS PASSED=============\n");
 
-    char path2[] = "./include";
+    char path2[] = "./src";
     git_obj_tree *tree, *tree2;
 
     tree = create_tree_from_path(repo, path2);
@@ -132,20 +134,42 @@ void test_objects(const git_repo *repo) {
     printf("hash of tree: %s\n", tree->obj.hash);
     print_tree(tree);
      
-    assert(write_tree_to_disk(repo, tree) == 0);
+    write_tree_to_disk(repo, tree, 0);
 
     tree2 = create_tree_from_disk(repo, tree->obj.hash);
     assert(tree2 != NULL);
     ASSERT_STREQ(tree2->obj.hash, tree->obj.hash);
     assert(tree2->size == tree->size);
 
-    assert(tree_cmp(tree, tree2, path2) == 0);
-
-
-    free_blob(blob);
-    free_blob(blob2);
-    free_tree(tree);
     printf("================TREE TESTS PASSED=============\n");
+
+    git_obj_commit *commit, *commit2;
+    git_obj *commit_obj;
+    obj_hash *commit_hash;
+
+    commit = create_commit(tree, 1, &(blob->hash), "Gordon Zhou", "gordonzhou223@gmail.com", "hello world");
+
+    commit_obj = create_commit_obj(commit);
+    commit_hash = &(commit_obj->hash);
+    write_obj_to_disk(repo, commit_obj);
+
+    commit2 = create_commit_from_disk(repo, *commit_hash);
+    ASSERT_STREQ(commit2->tree_hash, commit->tree_hash);
+    ASSERT_STREQ(commit2->msg, commit->msg);
+    ASSERT_STREQ(commit2->author_name, commit->author_name);
+    ASSERT_STREQ(commit2->author_email, commit->author_email);
+    assert(commit2->num_parents == commit->num_parents);
+    ASSERT_STREQ(commit2->parents[0], commit->parents[0]);
+    assert(commit2->timestamp == commit->timestamp);
+
+    print_commit(commit2);
+    printf("================COMMIT TESTS PASSED=============\n");
+    
+    free_commit(commit);
+    free_commit(commit2);
+    free_obj(blob);
+    free_obj(blob2);
+    free_tree(tree);
     // fs_remove("build/notes.md");
 }
 

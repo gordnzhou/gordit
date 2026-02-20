@@ -3,7 +3,7 @@
 
 #include "filesystem.h"
 #include "repo.h"
-#include "objects.h"
+#include "tree.h"
 #include "filespec.h"
 
 /*

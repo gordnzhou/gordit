@@ -1,3 +1,4 @@
+#include <string.h>
 
 #include "filespec.h"
 #include "logging.h"

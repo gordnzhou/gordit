@@ -1,11 +1,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include "filesystem.h"
 #include "objects.h"
 #include "repo.h"
 #include "utils.h"
+#include "logging.h"
 #include "refs.h"
 
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
@@ -101,9 +103,9 @@ int create_repo_folder(const char *cwd) {
 
 
 int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
-    char path2[OBJ_HASH_SIZE + 1];
+    char path2[sizeof(obj_hash) + 1];
 
-    for (size_t i = OBJ_HASH_SIZE; i > 2; --i) {
+    for (size_t i = sizeof(obj_hash); i > 2; --i) {
         path2[i] = hash[i - 1];
     }
     path2[0] = hash[0];
@@ -118,8 +120,7 @@ int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
     char parent_path[PATH_MAX];
     fs_path_dirname(out, parent_path);
     if (fs_mkdir(parent_path, 0700) == -1) {
-        perror("Could not make directory objects store");
-        return -1;
+        fatal("could not create %s: %s", parent_path, strerror(errno));
     }
 
     return 0;

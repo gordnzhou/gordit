@@ -1,5 +1,8 @@
 # gordit
-Git implementation in C
+a C program that emulates git's version control system
+
+# Requirements
+- requires zlib and openssl libraries
 
 ## Notes
 - converts CRLF in text files before hashing for cross-platform 

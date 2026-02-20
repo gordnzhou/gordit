@@ -20,7 +20,7 @@ typedef char obj_hash[OBJ_HASH_SIZE];
 #define HEAD_PATH GIT_FOLDER   "/" HEAD_NAME
 #define INDEX_PATH GIT_FOLDER  "/" INDEX_NAME
 
-#define LOCAL_REFS_NAME  REFS_NAME "/head"
+#define LOCAL_REFS_NAME  REFS_NAME "/heads"
 #define REMOTE_REFS_NAME REFS_NAME "/remotes"
 #define TAG_REFS_NAME    REFS_NAME "/tags"
 #define LOCAL_REFS_FOLDER  GIT_FOLDER "/" LOCAL_REFS_NAME
@@ -55,7 +55,7 @@ const git_repo *get_working_repo(const char *cwd);
 int create_repo_folder(const char *cwd);
 
 // gets path of object in repo's objects folder
-// @return 1 if object already in git folder, 0 if new, -1 if could not create dir
+// @return 1 if path already exists, 0 otherwise
 int obj_store_path(const git_repo *, const obj_hash, char *out);
 
 // @return 1 if path is inside of repo and not in git folder

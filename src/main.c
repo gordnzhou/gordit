@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <zlib.h>
 
 #include "filesystem.h"
-#include "objects.h" 
 #include "repo.h"
 #include "dircache.h"
 #include "filespec.h"
@@ -13,6 +11,77 @@
 #include "utils.h"
 #include "refs.h"
 #include "commit.h"
+#include "diff.h"
+
+int do_commit(const git_repo *repo, 
+    git_dircache *dircache, 
+    char *author_name, char *author_email, 
+    char *msg
+) {
+    if (dircache_has_conflicts(dircache)) {
+        return error("there are unmerged files in index, cannot commit");
+    }
+
+    obj_hash parent_hash;
+    int num_parents = 1;
+    char *head_content = malloc(256);
+    int is_detached = read_head(repo, head_content, 256);
+    char *head_ref_path = NULL;
+    if (is_detached) {
+        warn("head is not pointing to any branch, commit will be easily lost!");
+        string_to_hash(&parent_hash, head_content);
+    } else {
+        head_ref_path = head_content;
+        if (read_ref(repo, head_ref_path, &parent_hash) < 0) {
+            num_parents = 0;
+        }
+    }
+
+    if (num_parents == 1) {
+        git_obj_commit *parent_commit = create_commit_from_disk(repo, parent_hash);
+        git_obj_tree *parent_tree = create_tree_from_disk(repo, parent_commit->tree_hash);
+        if (is_tree_and_dc_same(dircache, parent_tree)) {
+            free(head_content);
+            free_tree(parent_tree);
+            free_commit(parent_commit);
+            return info("no changes added to commit");
+        }
+
+        free_tree(parent_tree);
+        free_commit(parent_commit);
+    }
+
+    git_obj_tree *tree = build_tree_from_index(dircache);
+    if (tree->size == 0) {
+        free(head_content);
+        free_tree(tree);
+        return info("empty tree, nothing to commit.");
+    } 
+
+    git_obj_commit *commit = create_commit(tree, num_parents, &parent_hash,
+        author_name, author_email, msg);
+    git_obj *commit_obj = create_commit_obj(commit);
+    obj_hash *commit_hash = &(commit_obj->hash);
+
+    write_obj_to_disk(repo, commit_obj);
+    write_tree_to_disk(repo, tree, 1);
+    print_tree(tree);
+    print_commit(commit);
+    printf("COMMIT: %s\n", *commit_hash);
+
+    if (is_detached) {
+        detach_head(repo, commit_hash);
+    } else {
+        write_ref(repo, head_ref_path, commit_hash);
+    }
+
+    free_obj(commit_obj);
+    free(commit);
+    free_tree(tree);
+    free(head_content);
+    
+    return 0;
+}
 
 int main(int argc, char* argv[]) {
     if (argc <= 1) {
@@ -76,7 +145,7 @@ int main(int argc, char* argv[]) {
                 }
             } else {
                 if (remove_file_from_dc(dircache, info) != 0) {
-                    error("could not find file: %s", argv[2 + i]);
+                    error("'%s' is not in index", argv[2 + i]);
                     end_fileinfo(info);
                     goto add_end;
                 }
@@ -95,60 +164,10 @@ add_end:;
             fatal("no commit message");
         }
 
-        // TODO: get this from global .gorditconfig 
-        char *author_name = "Walter White";
-        char *author_email = "wwhite@hotmail.com"; 
-
         git_dircache *dircache = create_dircache(repo);
-        if (dircache_has_conflicts(dircache)) {
-            error("there are unmerged files in index, cannot commit");
-            goto end;
-        }
-
-        int is_detached;
-        obj_hash parent_hash;
-        int num_parents = 1;
-
-        char *head_content = read_head(repo, &is_detached);
-        char *head_ref_path = NULL;
-        if (is_detached) {
-            warn("head is not pointing to any branch, commit will be easily lost!");
-            snprintf(parent_hash, OBJ_HASH_SIZE, "%s", head_content);
-        } else {
-            head_ref_path = head_content;
-            if (read_ref(repo, head_ref_path, &parent_hash) < 0) {
-                num_parents = 0;
-            }
-        }
-
-        git_obj_tree *tree = build_tree_from_index(dircache);
-        if (tree->size == 0) {
-            return info("empty tree, nothing to commit.");
-            free(head_content);
-            return 0;
-        }
-
-        git_obj_commit *commit = create_commit(tree, num_parents, &parent_hash,
-            author_name, author_email, argv[2]);
-        git_obj *commit_obj = create_commit_obj(commit);
-        obj_hash *commit_hash = &(commit_obj->hash);
-        printf("%s\n%s\n", commit_obj->data, commit_obj->data + strlen((char *)commit_obj->data) + 1);
-
-        // write_obj_to_disk(repo, commit_obj);
-        // write_tree_to_disk(repo, tree);
-        // print_tree(tree);
-
-        if (is_detached) {
-            // detach_head(repo, commit_hash);
-        } else {
-            // write_ref(repo, head_ref_path, commit_hash);
-        }
-
-        free(head_content);
-        free(commit);
-        free_tree(tree);
-        free_obj(commit_obj);
-    } else {
+        do_commit(repo, dircache, "Walter White", "wwhite@hotmail.com", argv[2]);
+        free_dircache(dircache);
+   } else {
         info("%s is not a git command.", command);
     }
 

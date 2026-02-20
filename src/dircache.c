@@ -12,6 +12,7 @@
 #include "dircache.h"
 #include "logging.h"
 #include "utils.h"
+#include "tree.h"
 
 #define INDEX_HEADER_SIG "DIRC"
 #define INDEX_HEADER_SIZE 12
@@ -211,7 +212,6 @@ int index_sort_cmp(const char *name1, const char *name2) {
 }
 
 void add_index_entry(git_dircache *dircache, git_index_entry *entry) {
-    // TODO: if entry->name is currently in merge conflict, replace its 3 entries with this one
     int first_not_smaller = 0;
     while (first_not_smaller < dircache->num_entries
         && index_sort_cmp(dircache->entries[first_not_smaller]->name, entry->name) < 0 ) {
@@ -224,6 +224,7 @@ void add_index_entry(git_dircache *dircache, git_index_entry *entry) {
         num_same++;
     }
     
+    // not removing any case
     if (first_not_smaller == dircache->num_entries || (first_not_smaller < dircache->num_entries && num_same == 0)) {   
         if (dircache->num_entries >= dircache->capacity) {
             dircache->capacity *= 2;
@@ -274,14 +275,14 @@ int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo) {
         }
     }
 
-    git_obj_blob *blob = create_blob_from_file(finfo);
+    git_obj *blob = create_blob_from_file(finfo);
     if (blob == NULL) {
         free(entry);
         return -1;
     }
 
-    snprintf(entry->hash, OBJ_HASH_SIZE, "%s", blob->obj.hash);
-    free_blob(blob);
+    copy_hash(&(entry->hash), &(blob->hash));
+    free_obj(blob);
 
     add_index_entry(dircache, entry);
     return 0;
@@ -315,65 +316,53 @@ int remove_file_from_dc(git_dircache *dircache, const fileinfo *finfo) {
 }
 
 git_obj_tree *build_tree_from_index(git_dircache *dircache) {
-    git_obj_tree *tree = init_tree();
+    git_obj_tree *root = init_tree();
 
     for (int i = 0; i < dircache->num_entries; i++) {
         git_index_entry *entry = dircache->entries[i];
-        git_obj_tree *parent_tree = tree;
+        git_obj_tree *parent_tree = root;
 
         char dir_parts[PATH_MAX];
         if (fs_path_dirname(entry->name, dir_parts) == 1) {
-            goto add_entry;
+            goto add_blob;
         }
-        
+
         char *part = strtok(dir_parts, "/");
         while (part != NULL) {
-            int is_new_tree = 1;
-
-            for (int j = 0; j < parent_tree->size; j++) {
-                git_tree_entry *t_entry = parent_tree->entries[j];        
-                if (t_entry->type == TREE_OBJ && strcmp(part, t_entry->name) == 0) {
-                    parent_tree = t_entry->u.tree;
-                    is_new_tree = 0;
-                    break;
+            if (parent_tree->size > 0) {
+                // works assuming index is sorted by name
+                git_tree_entry *tail_entry = parent_tree->entries[parent_tree->size-1];
+                if (tail_entry->type == OBJ_TYPE_TREE && strcmp(part, tail_entry->name) == 0) {
+                    parent_tree = tail_entry->u.tree;
+                    part = strtok(NULL, "/");
+                    continue;
                 }
             }
 
-            if (is_new_tree) {
-                git_tree_entry *new_tree_entry = smalloc(sizeof(*new_tree_entry));
-                new_tree_entry->type = TREE_OBJ;
-                new_tree_entry->git_mode = GIT_MODE_DIR;
-                snprintf(new_tree_entry->name, PATH_MAX, "%s", part);
-
-                new_tree_entry->u.tree = init_tree();
-                new_tree_entry->u.tree->obj.size = 0;
-                new_tree_entry->u.tree->obj.data = NULL;
-                new_tree_entry->u.tree->obj.type = O_TYPE_TREE;
-                
-                add_tree_entry(new_tree_entry, parent_tree);
-                parent_tree = new_tree_entry->u.tree;
-            }
+            git_tree_entry *new_tree_entry = smalloc(sizeof(*new_tree_entry));
+            new_tree_entry->type = OBJ_TYPE_TREE;
+            new_tree_entry->git_mode = GIT_MODE_DIR;
+            snprintf(new_tree_entry->name, PATH_MAX, "%s", part);
+            new_tree_entry->u.tree = init_tree(); 
+            
+            add_tree_entry(new_tree_entry, parent_tree);
+            parent_tree = new_tree_entry->u.tree;
 
             part = strtok(NULL, "/");
         }
 
-    add_entry:;
+    add_blob:;
         git_tree_entry *b_entry = smalloc(sizeof(*b_entry));
-        b_entry->type = BLOB_OBJ;
+        b_entry->type = BLOB_ENTRY;
         b_entry->git_mode = entry->git_mode;
-        fs_path_basename(entry->name, b_entry->name);
-        b_entry->u.blob = smalloc(sizeof(git_obj_blob));
-        b_entry->u.blob->obj.size = 0;
-        b_entry->u.blob->obj.data = NULL;
-        b_entry->u.blob->obj.type = O_TYPE_BLOB;
-        snprintf(b_entry->u.blob->obj.hash, OBJ_HASH_SIZE, "%s", entry->hash);
-
+        snprintf(b_entry->name, PATH_MAX, "%s", entry->name);
+        copy_hash(&(b_entry->u.blob_hash), &(entry->hash));
         add_tree_entry(b_entry, parent_tree);
     }
 
-    hash_tree_full(tree); 
+    hash_tree_full(root); 
         
-    return tree;
+    return root;
 }
 
 int dircache_has_conflicts(git_dircache *dircache) {
@@ -382,6 +371,5 @@ int dircache_has_conflicts(git_dircache *dircache) {
             return 1;
         }
     }
-
     return 0;
 }

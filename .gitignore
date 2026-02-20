@@ -1,11 +1,9 @@
-# Prerequisites
 *.d
-makefile
+.DS_Store
 .vscode/
 build/ 
+bin/
 testrepo/
-
-
 .gordit
 .gorditignore
 gordit

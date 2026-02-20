@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "refs.h"
 #include "logging.h"
@@ -35,7 +36,7 @@ int read_ref(const git_repo *repo, const char *ref_path, obj_hash *out_hash) {
     }
 
     FILE *fptr = sfopen(full_path, "r");
-    sfgets(*out_hash, OBJ_HASH_SIZE, fptr, full_path, 1);
+    sfgets(*out_hash, sizeof(obj_hash), fptr, full_path, 1);
     fclose(fptr);
     return 0;
 }
@@ -46,9 +47,21 @@ char *local_ref_path(const char *local_branch_name) {
     return ret;
 }
 
+char *tag_path(const char *tag_name) {
+    char *ret = smalloc(strlen(TAG_REFS_NAME) + strlen(tag_name) + 1);
+    fs_path_join(TAG_REFS_NAME, tag_name, ret);
+    return ret;
+}
+
 void write_branch_local(const git_repo *repo, char *name, const obj_hash *commit) {
     char *ref_path = local_ref_path(name);
     write_ref(repo, ref_path, commit);
+    free(ref_path);
+}
+
+void write_tag(const git_repo *repo, char *name, const obj_hash *hash) {
+    char *ref_path = tag_path(name);
+    write_ref(repo, ref_path, hash);
     free(ref_path);
 }
 
@@ -58,8 +71,21 @@ void delete_branch_local(const git_repo *repo, char *name) {
     free(ref_path);
 }
 
+void delete_tag(const git_repo *repo, char *name) {
+    char *ref_path = tag_path(name);
+    del_ref(repo, ref_path);
+    free(ref_path);
+}
+
 int read_branch_local(const git_repo *repo, char *name, obj_hash *out_hash) {
     char *ref_path = local_ref_path(name);
+    int ret = read_ref(repo, ref_path, out_hash);
+    free(ref_path);
+    return ret;
+}
+
+int read_tag(const git_repo *repo, char *name, obj_hash *out_hash) {
+    char *ref_path = tag_path(name);
     int ret = read_ref(repo, ref_path, out_hash);
     free(ref_path);
     return ret;
@@ -89,25 +115,21 @@ void detach_head(const git_repo *repo, const obj_hash *commit) {
     fclose(fptr);
 }
 
-char *read_head(const git_repo *repo, int *is_detached) {
+int read_head(const git_repo *repo, char *out, size_t out_size) {
     #define BUF_SIZE 256
-
-    char *buf = smalloc(BUF_SIZE);
-
+    char buf[BUF_SIZE];
     FILE *fptr = sfopen(repo->head_path, "r");
     sfgets(buf, BUF_SIZE, fptr, repo->head_path, 0);
     fclose(fptr);
 
-    if (strstr(buf, INDIRECT_REF_HEADER) == buf) {
-        *is_detached = 0;
-        return buf + strlen(INDIRECT_REF_HEADER);
+    int is_detached = strstr(buf, INDIRECT_REF_HEADER) != buf; 
+    char *cpy_start = buf + (is_detached ? 0 : strlen(INDIRECT_REF_HEADER));
+
+    if (is_detached && strlen(buf) + 1 != sizeof(obj_hash)) {
+        fatal("head is corrupted: it neither points to a ref nor directly to a hash");
     }
 
-    if (strlen(buf) != OBJ_HASH_SIZE - 1) {
-        fatal("head is corrupted: it neither points to a ref nor a hash");
-    }
-
-    *is_detached = 1;
-    return buf;
+    snprintf(out, out_size, "%s", cpy_start);
+    return is_detached;
 }
 

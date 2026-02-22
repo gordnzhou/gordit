@@ -57,6 +57,7 @@ int file_matches_spec(const char *cwd, const char *filepath, const char *spec) {
     return strcmp(spec, name) == 0;
 }
 
+
 int check_ignores(const char *folder, const struct fileinfo *info, const git_repo *repo) {
     int retval = 0;
     DIR *dir;
@@ -99,7 +100,7 @@ cleanup:
     return check_ignores(parent, info, repo);
 }
 
-int is_file_ignored(const git_repo *repo, struct fileinfo *info) {
+int is_file_ignored(const git_repo *repo, const struct fileinfo *info) {
     char immediate_parent[PATH_MAX];
     fs_path_dirname(info->path, immediate_parent);
     return check_ignores(immediate_parent, info, repo);

@@ -6,10 +6,7 @@
 typedef struct git_tree_entry {
     char name[PATH_MAX];
     unsigned int git_mode;
-    enum {
-        BLOB_ENTRY,
-        TREE_ENTRY
-    } type;
+    enum obj_type type;
     union {
         obj_hash blob_hash;
         struct git_obj_tree *tree;
@@ -28,7 +25,7 @@ void free_tree(git_obj_tree *);
 // prints tree and children head recursively
 void print_tree(git_obj_tree *);
 
-git_obj_tree *create_tree_from_disk(const git_repo *repo, obj_hash hash);
+git_obj_tree *read_tree_from_disk(const git_repo *repo, obj_hash hash);
 
 git_obj_tree *init_tree();
 

@@ -71,6 +71,8 @@ int fs_path_dirname(const char* path, char* out);
 // @brief Gets final component of path (name of rightmost file or folder).
 void fs_path_basename(const char* path, char* out);
 
+const char *fs_path_pbasename(const char *path);
+
 // @brief Joins two paths together.
 // @param path1 a folder path (rel or abs)
 // @param path2 a file OR folder path (rel or abs)

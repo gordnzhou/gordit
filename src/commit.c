@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "commit.h"
+#include "refs.h"
 #include "tree.h"
 #include "utils.h"
 #include "logging.h"
@@ -23,9 +24,9 @@ git_obj_commit *create_commit(git_obj_tree *tree,
     git_obj_commit *commit = smalloc(sizeof(*commit));
     commit->timestamp = time(NULL);
     copy_hash(&(commit->tree_hash), &(tree->obj.hash));
-    commit->author_name = strdup(author_name);
-    commit->author_email = strdup(author_email);
-    commit->msg = strdup(msg);
+    commit->author_name = sstrdup(author_name);
+    commit->author_email = sstrdup(author_email);
+    commit->msg = sstrdup(msg);
     commit->num_parents = num_parents;
     commit->parents = calloc(num_parents, sizeof(obj_hash));
     for (int i = 0; i < num_parents; i++) {
@@ -41,9 +42,9 @@ size_t serialize_person_and_timestamp(char *out, size_t size, const char *name, 
 
 time_t deserialize_person_and_timestamp(const char *line, char **name, char **email) {
     char *e_start = strstr(line, " <");
-    char *e_end = strstr(line, "> ");
-    *name = strndup(line, e_start - line);
-    *email = strndup(e_start + 2, e_end - e_start - 2); 
+    char *e_end = strstr(line, "> "); 
+    *name = sstrndup(line, e_start - line);
+    *email = sstrndup(e_start + 2, e_end - e_start - 2); 
     return atoll(e_end + 2);
 }
 
@@ -80,7 +81,7 @@ git_obj_commit *deserialize_commit(char *in_str) {
         error("could not parse to commit: no header");
         return NULL;
     }
-    commit->msg = strdup(message + 2);
+    commit->msg = sstrdup(message + 2);
     *message = '\0';
     
     char *saveptr_lines = NULL;
@@ -157,4 +158,25 @@ git_obj_commit *create_commit_from_disk(const git_repo *repo, obj_hash hash) {
     free(contents);
     free_obj(obj);
     return commit;
+}
+
+git_obj_commit *read_head_commit(const git_repo *repo, int *is_detached) {
+    #define HEAD_BUF_SIZE 256
+
+    obj_hash head_commit_hash;
+    char *head_content = malloc(HEAD_BUF_SIZE);
+    *is_detached = read_head(repo, head_content, HEAD_BUF_SIZE);
+
+    if (*is_detached) {
+        warn("head is not pointing to any branch, commit will be easily lost!");
+        string_to_hash(&head_commit_hash, head_content);
+    } else {
+        if (read_ref(repo, head_content, &head_commit_hash) < 0) {
+            return NULL;
+        }
+    }
+
+    free(head_content);
+
+    return create_commit_from_disk(repo, head_commit_hash);
 }

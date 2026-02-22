@@ -19,6 +19,7 @@ struct fileinfo *start_fileinfo(const git_repo *repo, const char *path, const ch
 // closes file stream
 void end_fileinfo(struct fileinfo *info);
 
-int is_file_ignored(const git_repo *repo, struct fileinfo *info);
+int is_file_ignored(const git_repo *repo, const struct fileinfo *info);
+
 
 #endif

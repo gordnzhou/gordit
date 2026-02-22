@@ -20,4 +20,7 @@ void fwriteb_full(void *src, size_t filesize, FILE *file, const char *name);
 void sfputs(const char *str, FILE *file, const char *name);
 void sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize);
 void sremove(const char *filepath);
+
+char *sstrdup(const char *src);
+char *sstrndup(const char *src, size_t size);
 #endif

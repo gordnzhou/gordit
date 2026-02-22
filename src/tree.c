@@ -15,13 +15,11 @@ void print_tree_recur(git_obj_tree *tree, const char *prefix) {
     
     for (int i = 0; i < tree->size; i++) {
         git_tree_entry *entry = tree->entries[i];
-        char name[PATH_MAX];
-        fs_path_basename(entry->name, name);
-        printf("%s%s: %s ", prefix, obj_type_string(entry->type), name);
+        printf("%s%s: %s ", prefix, obj_type_string(entry->type), fs_path_pbasename(entry->name));
 
-        if (entry->type == BLOB_ENTRY) {
+        if (entry->type == OBJ_TYPE_BLOB) {
             printf("(%s)\n", entry->u.blob_hash);
-        } else {
+        } else if (entry->type == OBJ_TYPE_TREE) {
             printf("(%s)\n", entry->u.tree->obj.hash);
             int len = strlen(prefix) + strlen(INDENT) + 1;
             char *new_prefix = smalloc(len);
@@ -68,10 +66,8 @@ void hash_tree_full(git_obj_tree *tree) {
             type = obj_type_string(OBJ_TYPE_BLOB);
         }
 
-        char name[PATH_MAX];
-        fs_path_basename(entry->name, name);
         size_t line_size = snprintf((char *)buf + content_size, MAX_TREE_ENTRY_LINE, 
-            "%06o %s %s %s\n", entry->git_mode, type, hash, name);
+            "%06o %s %s %s\n", entry->git_mode, type, hash, fs_path_pbasename(entry->name));
         assert(line_size <= MAX_TREE_ENTRY_LINE);
 
         content_size += line_size;
@@ -84,7 +80,7 @@ void hash_tree_full(git_obj_tree *tree) {
 void free_tree(git_obj_tree *tree) {
     for (int i = 0; i < tree->size; i++) {
         git_tree_entry *entry = tree->entries[i];
-        if (entry->type == TREE_ENTRY) {
+        if (entry->type == OBJ_TYPE_TREE) {
             free_tree(entry->u.tree);
         }
         free(entry);
@@ -115,21 +111,18 @@ int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree, int check
     int exists = 1;
     for (int i = 0; i < tree->size; i++) {
         git_tree_entry *entry = tree->entries[i];
-        switch (entry->type) {
+        if (entry->type == OBJ_TYPE_TREE) {
+            exists &= write_tree_to_disk(repo, entry->u.tree, check_blobs);
+        } else if (entry->type == OBJ_TYPE_BLOB) {
+            if (!check_blobs) {
+                continue;
+            }
             char path[PATH_MAX];
-            case TREE_ENTRY:
-                exists &= write_tree_to_disk(repo, entry->u.tree, check_blobs);
-                break;
-            case BLOB_ENTRY:
-                if (!check_blobs) {
-                    break;
-                }
-                obj_store_path(repo, entry->u.blob_hash, path);
-                if (!fs_file_exists(path)) {
-                    DEBUG_PRINT("Writing tree %s but it contains a blob that has not already been written: %s", 
-                        tree->obj.hash, entry->u.blob_hash);
-                }
-                break;
+            obj_store_path(repo, entry->u.blob_hash, path);
+            if (!fs_file_exists(path)) {
+                DEBUG_PRINT("Writing tree %s but it contains a blob that has not already been written: %s", 
+                    tree->obj.hash, entry->u.blob_hash);
+            }
         }
     }
     exists &= write_obj_to_disk(repo, &(tree->obj));
@@ -155,16 +148,19 @@ git_obj_tree *deserialize_tree_recur(const git_repo *repo, obj_hash hash, const 
         char *name = strtok_r(NULL, " ", &saveptr_fields);
         
         if (strcmp(type, obj_type_string(OBJ_TYPE_BLOB)) == 0) {
-            entry->type = BLOB_ENTRY;
+            entry->type = OBJ_TYPE_BLOB;
             snprintf(entry->name, PATH_MAX, "%s%s", path, name);
 
             string_to_hash(&(entry->u.blob_hash), hash);
         } else if (strcmp(type, obj_type_string(OBJ_TYPE_TREE)) == 0) {
-            entry->type = TREE_ENTRY;
+            entry->type = OBJ_TYPE_TREE;
             snprintf(entry->name, PATH_MAX, "%s", name);
             
             char subpath[PATH_MAX];
-            snprintf(subpath, PATH_MAX, "%s%s/", path, entry->name);
+            size_t pathsize = snprintf(subpath, PATH_MAX, "%s%s/", path, entry->name);
+            if (pathsize > PATH_MAX) {
+                fatal("could not read tree '%s': '%s''s name is too long", tree->obj.hash, hash);
+            }
             entry->u.tree = deserialize_tree_recur(repo, hash, subpath);
         } else {
             fatal("tree %s is corrupted: could not get object type of entries", tree->obj.hash);
@@ -179,7 +175,7 @@ git_obj_tree *deserialize_tree_recur(const git_repo *repo, obj_hash hash, const 
     return tree;
 }
 
-git_obj_tree *create_tree_from_disk(const git_repo *repo, obj_hash hash) {
+git_obj_tree *read_tree_from_disk(const git_repo *repo, obj_hash hash) {
     return deserialize_tree_recur(repo, hash, "");
 }
 
@@ -187,13 +183,10 @@ int tree_num_blobs(const git_obj_tree *root) {
     int ret = 0;
     for (int i = 0; i < root->size; i++) {
         git_tree_entry *entry = root->entries[i];
-        switch (entry->type) {
-            case BLOB_ENTRY:
-                ret++;
-                break;
-            case TREE_ENTRY:
-                ret += tree_num_blobs(entry->u.tree);
-                break;
+        if (entry->type == OBJ_TYPE_BLOB) {
+            ret++;
+        } else if (entry->type == OBJ_TYPE_TREE) {
+            ret += tree_num_blobs(entry->u.tree);
         }
     }
     return ret;
@@ -206,13 +199,10 @@ void flatten_tree_recur(
 {
     for (int i = 0; i < tree->size && *idx < max_size; i++) {
         git_tree_entry *entry = tree->entries[i];
-        switch (entry->type) {
-            case BLOB_ENTRY:
-                out_blob_list[(*idx)++] = entry;
-                break;
-            case TREE_ENTRY:
-                flatten_tree_recur(out_blob_list, max_size, idx, entry->u.tree);
-                break;
+        if (entry->type == OBJ_TYPE_BLOB) {
+            out_blob_list[(*idx)++] = entry;
+        } else if (entry->type == OBJ_TYPE_TREE) {
+            flatten_tree_recur(out_blob_list, max_size, idx, entry->u.tree);
         }
     }
 }
@@ -233,7 +223,7 @@ git_obj_tree *create_tree_from_path(const git_repo *repo, const char *folderpath
 }
 
 void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, git_obj_tree *tree) {
-    char *path_copy = strdup(folderpath);
+    char *path_copy = sstrdup(folderpath);
     fs_dirent *ent;
 
     while ((ent = fs_readdir(dir, folderpath)) != NULL) {
@@ -258,10 +248,10 @@ void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath,
 
             end_fileinfo(finfo);
             copy_hash(&(tree_ent->u.blob_hash), &(blob->hash));
-            tree_ent->type = BLOB_ENTRY;
+            tree_ent->type = OBJ_TYPE_BLOB;
         } else if (ent->de_type == FS_ISDIR) {
             tree_ent->u.tree = create_tree_recur(repo, ent->de_path);
-            tree_ent->type = TREE_ENTRY;
+            tree_ent->type = OBJ_TYPE_TREE;
         }
 
         add_tree_entry(tree_ent, tree);

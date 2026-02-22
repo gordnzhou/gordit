@@ -22,6 +22,8 @@ int read_tag(const git_repo *repo, char *name, obj_hash *out_hash);
 void detach_head(const git_repo *repo, const obj_hash *commit);
 void move_head(const git_repo *repo, char *branch_name);
 
+int is_head_detached(const git_repo *repo);
+
 // @return 1 if head is detached (no branch ref), else 0.
 int read_head(const git_repo *repo, char *out, size_t out_size);
 #endif

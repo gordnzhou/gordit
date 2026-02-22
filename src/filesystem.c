@@ -120,6 +120,13 @@ int fs_file_exists(const char *filename) {
     return 1;
 }
 
+const char *fs_path_pbasename(const char *path) {
+    char *lfs = strrchr(path, '/');
+    char *lbs = strrchr(path, '\\');
+    char *ls = (lfs > lbs) ? lfs : lbs;
+    return ls == NULL ? path : ls + 1;
+}
+
 void fs_path_join(const char *path1, const char *path2, char *out) {
     char *sep = "/";
 
@@ -189,15 +196,7 @@ void fs_path_basename(const char* path, char *out) {
         return;
     }
     
-    const char *start = path_copy;
-    char *lfs = strrchr(path_copy, '/');
-    char *lbs = strrchr(path_copy, '\\');
-    char *ls = (lfs > lbs) ? lfs : lbs;
-    if (ls != NULL) {
-        start = ls + 1;
-    }
-
-    snprintf(out, PATH_MAX, "%s", start);
+    snprintf(out, PATH_MAX, "%s", fs_path_pbasename(path_copy));
     free(path_copy);
 }
 

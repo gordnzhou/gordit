@@ -17,7 +17,7 @@ int is_tree_and_dc_same(const git_dircache *index, const git_obj_tree *tree) {
     for (int i = 0; i < tree_size; i++) {
         git_tree_entry *t_entry = tree_flat[i];
         git_index_entry *i_entry = index->entries[i];
-        assert(t_entry->type == BLOB_ENTRY);
+        assert(t_entry->type == OBJ_TYPE_BLOB);
         if (strcmp(t_entry->u.blob_hash, i_entry->hash) != 0 || strcmp(t_entry->name, i_entry->name) != 0) {
             same = 0;
             break;

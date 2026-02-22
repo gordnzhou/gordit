@@ -135,11 +135,12 @@ void write_index(const git_repo *repo, git_dircache *dircache) {
 }
 
 git_dircache *create_dircache(const git_repo * repo) {
+    git_dircache *dircache = smalloc(sizeof(*dircache));
+    dircache->num_entries = 0;
+    dircache->capacity = 1;
+    dircache->entries = scalloc(1, sizeof(git_index_entry *));
+
     if (!fs_file_exists(repo->index_path)) {
-        git_dircache *dircache = smalloc(sizeof(*dircache));
-        dircache->num_entries = 0;
-        dircache->capacity = 1;
-        dircache->entries = scalloc(1, sizeof(git_index_entry *));
         return dircache;
     }
 
@@ -162,16 +163,15 @@ git_dircache *create_dircache(const git_repo * repo) {
         warn("index version is not 2");
     }
     
-    git_dircache *dircache = smalloc(sizeof(*dircache));
-    dircache->num_entries = read_u32_big_endian(&buf_ptr);
-    if (info.fi_size <= INDEX_HEADER_SIZE || dircache->num_entries == 0) {
-        dircache->entries = NULL;
+    int num_entries = read_u32_big_endian(&buf_ptr);
+    if (info.fi_size <= INDEX_HEADER_SIZE || num_entries == 0) {
         fclose(fptr);
         return dircache;
     }
     
-    dircache->entries = scalloc(dircache->num_entries, sizeof(git_index_entry *));
+    dircache->num_entries = num_entries;
     dircache->capacity = dircache->num_entries;
+    dircache->entries = srealloc(dircache->entries, dircache->num_entries * sizeof(git_index_entry *));
     
     size_t buf_size = info.fi_size - INDEX_HEADER_SIZE; 
     unsigned char *buf = smalloc(buf_size);
@@ -211,8 +211,49 @@ int index_sort_cmp(const char *name1, const char *name2) {
     return res == 0 ? (int)(size1 - size2) : res;
 }
 
-void add_index_entry(git_dircache *dircache, git_index_entry *entry) {
-    int first_not_smaller = 0;
+git_index_entry **find_dircache_entry(const git_dircache *dircache, const git_index_entry *entry) {
+    return (git_index_entry **)bsearch(
+        &entry, 
+        dircache->entries, dircache->num_entries, 
+        sizeof(git_index_entry *), 
+        cmp_index_entry);
+}
+
+int is_stat_same(const fs_statinfo *s1, const fs_statinfo *s2) {
+    int same = 1;
+    same &= s1->fi_size == s2->fi_size;
+    same &= s1->fi_mtime == s2->fi_mtime;
+    same &= s1->fi_ctime == s2->fi_ctime;
+    return same; 
+}
+
+int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo, git_obj **blob) {
+    git_index_entry *entry = smalloc(sizeof(*entry));
+    entry->info = finfo->stat;
+    entry->stage_num = INDEX_STAGENUM_OK;
+    entry->git_mode = stat_mode_to_git(finfo->stat.fi_mode);
+    snprintf(entry->name, PATH_MAX, "%s", finfo->name);
+    entry->namelen = strlen(entry->name);
+
+    *blob = NULL;
+
+    git_index_entry **found = find_dircache_entry(dircache, entry);
+    if (found) {
+        if (is_stat_same(&(entry->info), &((*found)->info))) {
+            DEBUG_PRINT("skipping file: %s", finfo->path);
+            return 0;
+        }
+    }
+
+    *blob = create_blob_from_file(finfo);
+    if (*blob == NULL) {
+        free(entry);
+        return -1;
+    }
+
+    copy_hash(&(entry->hash), &((*blob)->hash));
+
+    int first_not_smaller = 0 ;
     while (first_not_smaller < dircache->num_entries
         && index_sort_cmp(dircache->entries[first_not_smaller]->name, entry->name) < 0 ) {
         first_not_smaller++;
@@ -233,7 +274,7 @@ void add_index_entry(git_dircache *dircache, git_index_entry *entry) {
 
         if (first_not_smaller == dircache->num_entries) {
             dircache->entries[dircache->num_entries++] = entry;
-            return;
+            return 0;
         }
     }
 
@@ -250,41 +291,7 @@ void add_index_entry(git_dircache *dircache, git_index_entry *entry) {
     
     dircache->entries[first_not_smaller] = entry;
     dircache->num_entries += 1 - num_same;
-}
 
-int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo) {
-    git_index_entry *entry = smalloc(sizeof(*entry));
-    entry->info = finfo->stat;
-    entry->stage_num = INDEX_STAGENUM_OK;
-    entry->git_mode = stat_mode_to_git(finfo->stat.fi_mode);
-    snprintf(entry->name, PATH_MAX, "%s", finfo->name);
-    entry->namelen = strlen(entry->name);
-
-    git_index_entry **found_entry = (git_index_entry **)bsearch(&entry, 
-        dircache->entries, dircache->num_entries, 
-        sizeof(git_index_entry *), cmp_index_entry);
-
-    if (found_entry != NULL) {
-        int same = 1;
-        same &= (*found_entry)->info.fi_size == finfo->stat.fi_size;
-        same &= (*found_entry)->info.fi_mtime == finfo->stat.fi_mtime;
-        same &= (*found_entry)->info.fi_ctime == finfo->stat.fi_ctime;
-        if (same) {
-            DEBUG_PRINT("skipping file: %s", finfo->path);
-            return 0;
-        }
-    }
-
-    git_obj *blob = create_blob_from_file(finfo);
-    if (blob == NULL) {
-        free(entry);
-        return -1;
-    }
-
-    copy_hash(&(entry->hash), &(blob->hash));
-    free_obj(blob);
-
-    add_index_entry(dircache, entry);
     return 0;
 }
 
@@ -353,7 +360,7 @@ git_obj_tree *build_tree_from_index(git_dircache *dircache) {
 
     add_blob:;
         git_tree_entry *b_entry = smalloc(sizeof(*b_entry));
-        b_entry->type = BLOB_ENTRY;
+        b_entry->type = OBJ_TYPE_BLOB;
         b_entry->git_mode = entry->git_mode;
         snprintf(b_entry->name, PATH_MAX, "%s", entry->name);
         copy_hash(&(b_entry->u.blob_hash), &(entry->hash));

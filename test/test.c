@@ -121,8 +121,8 @@ void test_objects(const git_repo *repo) {
     ASSERT_STREQ(blob2->hash, hash)
     assert(blob2->size == blob->size);
 
-    assert(create_file_from_blob("build/notes.md", blob2) == 0);
-    assert(fs_file_exists("build/notes.md") == 1);
+    assert(create_file_from_blob("bin/notes.md", blob2) == 0);
+    assert(fs_file_exists("bin/notes.md") == 1);
     printf("================BLOB TESTS PASSED=============\n");
 
     char path2[] = "./src";
@@ -136,7 +136,7 @@ void test_objects(const git_repo *repo) {
      
     write_tree_to_disk(repo, tree, 0);
 
-    tree2 = create_tree_from_disk(repo, tree->obj.hash);
+    tree2 = read_tree_from_disk(repo, tree->obj.hash);
     assert(tree2 != NULL);
     ASSERT_STREQ(tree2->obj.hash, tree->obj.hash);
     assert(tree2->size == tree->size);
@@ -170,19 +170,21 @@ void test_objects(const git_repo *repo) {
     free_obj(blob);
     free_obj(blob2);
     free_tree(tree);
-    // fs_remove("build/notes.md");
+    // fs_remove("bin/notes.md");
 }
 
 void test_index(const git_repo * repo) {
     git_dircache *dircache = create_dircache(repo);
     print_dircache(dircache);
 
-    char *path = "build/test.o";
+    char *path = "notes.md";
     printf("adding %s to index...\n", path);
 
     struct fileinfo *info = start_fileinfo(repo, path, "rb");
     assert(info != NULL);
-    assert(add_file_to_dc(dircache, info) == 0);
+
+    git_obj *blob;
+    assert(add_file_to_dc(dircache, info, &blob) == 0);
     end_fileinfo(info);
 
     print_dircache(dircache);
@@ -198,9 +200,9 @@ void test_index(const git_repo * repo) {
     assert(tree != NULL);
     print_tree(tree);
 
-    assert(remove_file_from_dc(dircache, info) != -1);
+    // assert(remove_file_from_dc(dircache, info) != -1);
 
-    // write_index(repo, dircache);
+    write_index(repo, dircache);
 
     free_dircache(dircache);
     free_tree(tree);

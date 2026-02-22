@@ -88,3 +88,22 @@ void sremove(const char *filepath) {
         fatal("could not delete %s:", filepath, strerror(errno));
     }
 }
+
+char *sstrdup(const char *src) {
+    size_t len = strlen(src);
+    char *dst = smalloc(len + 1);
+
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+    return dst;
+}
+
+char *sstrndup(const char *src, size_t size) {
+    size_t len = strnlen(src, size);
+    len = len < size ? len : size;
+    char *dst = smalloc(len + 1);
+
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+    return dst;
+}

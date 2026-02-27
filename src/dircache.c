@@ -232,7 +232,7 @@ int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo, git_obj **blob
     entry->info = finfo->stat;
     entry->stage_num = INDEX_STAGENUM_OK;
     entry->git_mode = stat_mode_to_git(finfo->stat.fi_mode);
-    snprintf(entry->name, PATH_MAX, "%s", finfo->name);
+    snprintf(entry->name, PATH_MAX, "%s", finfo->norm_path);
     entry->namelen = strlen(entry->name);
 
     *blob = NULL;
@@ -240,7 +240,7 @@ int add_file_to_dc(git_dircache *dircache, const fileinfo *finfo, git_obj **blob
     git_index_entry **found = find_dircache_entry(dircache, entry);
     if (found) {
         if (is_stat_same(&(entry->info), &((*found)->info))) {
-            DEBUG_PRINT("skipping file: %s", finfo->path);
+            DEBUG_PRINT("skipping file: %s", finfo->abs_path);
             return 0;
         }
     }
@@ -300,7 +300,7 @@ int remove_file_from_dc(git_dircache *dircache, const fileinfo *finfo) {
     for (int i = 0; i < dircache->num_entries; i++) {
         git_index_entry *entry = dircache->entries[i];
 
-        if (index_sort_cmp(finfo->name, entry->name) == 0) {
+        if (index_sort_cmp(finfo->norm_path, entry->name) == 0) {
             if (found == -1) {
                 found = i;
             }

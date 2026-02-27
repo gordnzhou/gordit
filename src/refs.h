@@ -24,6 +24,6 @@ void move_head(const git_repo *repo, char *branch_name);
 
 int is_head_detached(const git_repo *repo);
 
-// @return 1 if head is detached (no branch ref), else 0.
-int read_head(const git_repo *repo, char *out, size_t out_size);
+char *read_head(const git_repo *repo, int *is_detached);
+
 #endif

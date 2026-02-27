@@ -12,9 +12,9 @@ void print_repo_status(const git_repo *repo) {
     if (detached_head) {
         printf("HEAD is detached\n");
     } else {
-        char *head_ref = smalloc(256);
-        read_head(repo, head_ref, 256);
-        printf("On branch '%s'\n", fs_path_pbasename(head_ref));
+        char *head_content = read_head(repo, &detached_head);
+        printf("On branch '%s'\n", fs_path_pbasename(head_content));
+        free(head_content);
     }
 
     if (commit == NULL) {

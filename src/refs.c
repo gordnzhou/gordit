@@ -115,21 +115,24 @@ void detach_head(const git_repo *repo, const obj_hash *commit) {
     fclose(fptr);
 }
 
-int read_head(const git_repo *repo, char *out, size_t out_size) {
+char *read_head(const git_repo *repo, int *is_detached) {
     #define BUF_SIZE 256
+
     char buf[BUF_SIZE];
     FILE *fptr = sfopen(repo->head_path, "r");
     sfgets(buf, BUF_SIZE, fptr, repo->head_path, 0);
     fclose(fptr);
 
-    int is_detached = strstr(buf, INDIRECT_REF_HEADER) != buf; 
-    char *cpy_start = buf + (is_detached ? 0 : strlen(INDIRECT_REF_HEADER));
-
-    if (is_detached && strlen(buf) + 1 != sizeof(obj_hash)) {
-        fatal("head is corrupted: it neither points to a ref nor directly to a hash");
+    *is_detached = strstr(buf, INDIRECT_REF_HEADER) != buf; 
+    if (*is_detached && strlen(buf) + 1 != sizeof(obj_hash)) {
+        fatal("head is corrupted: it neither points to a ref nor contains a hash");
     }
 
-    snprintf(out, out_size, "%s", cpy_start);
-    return is_detached;
-}
+    char *cpy_start = buf + (*is_detached ? 0 : strlen(INDIRECT_REF_HEADER));
 
+    size_t out_size = strlen(cpy_start) + 1;
+    char *out = smalloc(out_size); 
+    snprintf(out, out_size, "%s", cpy_start);
+
+    return out;
+}

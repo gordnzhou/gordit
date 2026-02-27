@@ -1,11 +1,11 @@
-#ifndef FILESPEC_H
-#define FILESPEC_H
+#ifndef FILEINFO_H
+#define FILEINFO_H
 
 #include "repo.h"
 
 typedef struct fileinfo {
-    char name[PATH_MAX]; // relative to repo root
-    char path[PATH_MAX]; // absolute path, guaranteed to be inside of repo
+    char norm_path[PATH_MAX]; 
+    char abs_path[PATH_MAX]; 
     fs_statinfo stat;
     FILE *fptr;
 } fileinfo;
@@ -13,8 +13,8 @@ typedef struct fileinfo {
 
 int is_file_args_valid(const git_repo *repo, char **args, int num_args);
 
-// assume path is a valid file inside repo root
-struct fileinfo *start_fileinfo(const git_repo *repo, const char *path, const char *mode);
+// @param norm_path should be paths returned by a pathspec
+struct fileinfo *start_fileinfo(const git_repo *repo, const char *norm_path, const char *mode);
 
 // closes file stream
 void end_fileinfo(struct fileinfo *info);

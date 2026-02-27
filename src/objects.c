@@ -8,7 +8,7 @@
 #include "repo.h"
 #include "filesystem.h"
 #include "objects.h"
-#include "filespec.h"
+#include "fileinfo.h"
 #include "logging.h"
 #include "utils.h"
 
@@ -145,7 +145,7 @@ git_obj *create_blob_from_file(const fileinfo *finfo) {
 
     size_t norm_size = read_bytes_norm(buf, filesize, finfo->fptr, &read);
     if (read != filesize) {
-        error("could not create blob from '%s': unable to fully read file", finfo->path);
+        error("could not create blob from '%s': unable to fully read file", finfo->abs_path);
         free(buf);
         return NULL;
     }

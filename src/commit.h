@@ -20,8 +20,9 @@ void print_commit(const git_obj_commit *commit);
 git_obj_commit *create_commit(git_obj_tree *tree, 
     int num_parents, 
     obj_hash *parents, 
-    char *author_name, char *author_email, 
-    char *msg);
+    const char *author_name, 
+    const char *author_email, 
+    const char *msg);
 
 // serializes commit struct to object text
 git_obj *create_commit_obj(const git_obj_commit *commit);

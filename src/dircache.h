@@ -4,7 +4,7 @@
 #include "filesystem.h"
 #include "repo.h"
 #include "tree.h"
-#include "filespec.h"
+#include "fileinfo.h"
 
 /*
 Credits to git index format specification:

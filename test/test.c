@@ -8,7 +8,7 @@
 #include "filesystem.h"
 #include "objects.h"
 #include "dircache.h"
-#include "filespec.h"
+#include "fileinfo.h"
 #include "utils.h"
 #include "commit.h"
 

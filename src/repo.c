@@ -65,7 +65,7 @@ void init_repo_context(git_repo *repo, const char *repo_root) {
 const git_repo *get_working_repo(const char *cwd) {
     char repo_root[PATH_MAX];
     if (!git_find_root(cwd, repo_root)) {
-        return NULL;
+        fatal("not in a repository");
     }
 
     git_repo *repo = smalloc(sizeof(*repo));
@@ -89,7 +89,7 @@ int create_repo_folder(const char *cwd) {
         fs_mkdir(repo->refs_path, mode) == -1 ||
         fs_mkdir(local_refs_folder, mode) == -1 ||
         fs_mkdir(tag_refs_folder, mode) == -1) {
-        return -1;
+        fatal("could not initialize repository: %s", strerror(errno));
     }
 
     if (!exists) {

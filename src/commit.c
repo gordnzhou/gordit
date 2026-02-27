@@ -18,8 +18,9 @@ void free_commit(git_obj_commit *commit) {
 git_obj_commit *create_commit(git_obj_tree *tree, 
     int num_parents, 
     obj_hash *parents, 
-    char *author_name, char *author_email,
-    char *msg) {
+    const char *author_name, 
+    const char *author_email,
+    const char *msg) {
     
     git_obj_commit *commit = smalloc(sizeof(*commit));
     commit->timestamp = time(NULL);
@@ -161,12 +162,9 @@ git_obj_commit *create_commit_from_disk(const git_repo *repo, obj_hash hash) {
 }
 
 git_obj_commit *read_head_commit(const git_repo *repo, int *is_detached) {
-    #define HEAD_BUF_SIZE 256
-
     obj_hash head_commit_hash;
-    char *head_content = malloc(HEAD_BUF_SIZE);
-    *is_detached = read_head(repo, head_content, HEAD_BUF_SIZE);
 
+    char *head_content = read_head(repo, is_detached);
     if (*is_detached) {
         warn("head is not pointing to any branch, commit will be easily lost!");
         string_to_hash(&head_commit_hash, head_content);

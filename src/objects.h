@@ -4,7 +4,7 @@
 #include <time.h>
 
 #include "repo.h"
-#include "filespec.h"
+#include "fileinfo.h"
 
 #define OBJ_TYPE_LIST(X) \
     X(BLOB, "blob")      \

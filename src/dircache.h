@@ -50,6 +50,8 @@ git_obj_tree *build_tree_from_index(git_dircache *);
 
 int dircache_has_conflicts(git_dircache *);
 
+git_index_entry **dircache_find_file(const git_dircache *dircache, const char *name);
+
 int is_stat_same(const fs_statinfo *s1, const fs_statinfo *s2);
 
 #endif

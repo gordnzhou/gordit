@@ -226,7 +226,7 @@ void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath,
     char *path_copy = sstrdup(folderpath);
     fs_dirent *ent;
 
-    while ((ent = fs_readdir(dir, folderpath)) != NULL) {
+    while ((ent = fs_readdir(dir, path_copy)) != NULL) {
         if (strcmp(ent->de_name, ".") == 0 || strcmp(ent->de_name, "..") == 0) {
             continue;
         }

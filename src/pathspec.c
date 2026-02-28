@@ -148,3 +148,75 @@ void filter_ignores(pathspec_result *result, const git_repo *repo) {
     memmove(result->norm_paths, result->norm_paths + orig_size, sizeof(char *) * new_size);
     result->size = new_size;
 }
+
+void folder_add_files(pathspec_result *result, const git_repo *repo, const char *folder, int tracked_only, char **ignore_arr) {
+    DIR *dir;
+    if ((dir = fs_opendir(folder)) == NULL) {
+        fatal("could not open directory %s", folder);
+    }
+
+    char **ignore_arr_cur = NULL;
+    if (tracked_only) {
+        char ignore_list_path[PATH_MAX];
+        fs_path_join(folder, GIT_IGNORE_NAME, ignore_list_path);
+
+        if (fs_file_exists(ignore_list_path)) {
+            FILE *fptr = sfopen(ignore_list_path, "r");
+            char line[PATH_MAX];
+            while (fgets(line, PATH_MAX, fptr) != NULL) {
+                DA_PUSH(ignore_arr_cur, sstrdup(line));
+            }
+            fclose(fptr);
+        }
+    }
+
+    fs_dirent *ent;
+    while ((ent = fs_readdir(dir, folder)) != NULL) {
+        if (strcmp(ent->de_name, ".") == 0 || 
+            strcmp(ent->de_name, "..") == 0 ||
+            strcmp(ent->de_name, ".git") == 0 || 
+            strcmp(ent->de_name, GIT_FOLDER) == 0) {
+            continue;
+        }
+
+        char *norm_path = normalize_path(repo, ent->de_path);
+        int ignore = 0;
+        if (tracked_only) {
+            for (size_t i = 0; i < DA_LEN(ignore_arr_cur); i++) {
+                if (path_matches_pathspec(norm_path, ignore_arr_cur[i])) {
+                    ignore = 1;
+                    break;
+                } 
+            }
+            for (size_t i = 0; i < DA_LEN(ignore_arr); i++) {
+                if (path_matches_pathspec(norm_path, ignore_arr[i])) {
+                    ignore = 1;
+                    break;
+                } 
+            }
+  
+        }
+
+        if (ignore) {
+            continue;
+        }
+
+        if (ent->de_type == FS_ISFILE) {
+            add_pathspec_result(result, norm_path);
+        } else if (ent->de_type == FS_ISDIR) {
+            char *subfolder = sstrdup(ent->de_path);
+            folder_add_files(result, repo, subfolder, tracked_only, ignore_arr_cur);
+            free(subfolder);
+            free(norm_path);
+        }
+    }
+
+    fs_closedir(dir);
+    DA_FREE_DEEP(ignore_arr_cur, free);
+}
+
+pathspec_result *repo_all_files(const git_repo *repo, int tracked_only) {
+    pathspec_result *result = init_pathspec_result();
+    folder_add_files(result, repo, repo->root_path, tracked_only, NULL);
+    return result;
+}

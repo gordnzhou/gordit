@@ -10,16 +10,11 @@ typedef struct fileinfo {
     FILE *fptr;
 } fileinfo;
 
-
-int is_file_args_valid(const git_repo *repo, char **args, int num_args);
-
 // @param norm_path should be paths returned by a pathspec
 struct fileinfo *start_fileinfo(const git_repo *repo, const char *norm_path, const char *mode);
 
 // closes file stream
 void end_fileinfo(struct fileinfo *info);
-
-int is_file_ignored(const git_repo *repo, const struct fileinfo *info);
 
 
 #endif

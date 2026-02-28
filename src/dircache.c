@@ -219,6 +219,13 @@ git_index_entry **find_dircache_entry(const git_dircache *dircache, const git_in
         cmp_index_entry);
 }
 
+git_index_entry **dircache_find_file(const git_dircache *dircache, const char *name) {
+    git_index_entry entry = { 0 };
+    snprintf(entry.name, PATH_MAX, "%s", name);
+    return find_dircache_entry(dircache, &entry);
+}
+
+
 int is_stat_same(const fs_statinfo *s1, const fs_statinfo *s2) {
     int same = 1;
     same &= s1->fi_size == s2->fi_size;

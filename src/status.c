@@ -4,6 +4,8 @@
 #include "commit.h"
 #include "utils.h"
 #include "refs.h"
+#include "pathspec.h"
+#include "logging.h"
 
 void print_repo_status(const git_repo *repo) {
     int detached_head;
@@ -97,7 +99,10 @@ void print_repo_status(const git_repo *repo) {
             continue;
         }
 
-        fileinfo *info = start_fileinfo(repo, path, "rb");
+        fileinfo *info = start_fileinfo(repo, entry->name, "rb");
+        if (info == NULL) {
+            fatal("could not open %s\n", entry->name);
+        }
         
         if (!is_stat_same(&(info->stat), &(entry->info))) {
             git_obj *blob = create_blob_from_file(info);
@@ -111,13 +116,23 @@ void print_repo_status(const git_repo *repo) {
 
             free_obj(blob);
         }
+        end_fileinfo(info);
     }
 
     // TODO: show untracked files (files NOT in index AND NOT ignnored)
+    printf("\nUntracked files:\n");
+    pathspec_result *unignored_files = repo_all_files(repo, 1);
+    for (int i = 0; i < unignored_files->size; i++) {
+        char *name = unignored_files->norm_paths[i];
+        if (dircache_find_file(dircache, name) == NULL) {
+            printf("    %s\n", name);
+        }
+    }
+
+    free_pathspec_result(unignored_files);
 
     free(names);
     free(status);
-
     free(commit_blob_list);
     free_tree(commit_tree);
     free_commit(commit);

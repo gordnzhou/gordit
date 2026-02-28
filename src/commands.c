@@ -83,31 +83,25 @@ int do_commit(const git_repo *repo,
     return 0;
 }
 
-// ASSUME files are valid 
-void do_command_each_file(const git_repo *repo, 
-    git_dircache *dircache, 
-    char *mode, 
-    char **files, int num_files, 
+void do_command_each_file(const git_repo *repo, git_dircache *dircache, 
+    char *mode, const pathspec_result *in, 
     void (*cmd_cb)(const git_repo *, git_dircache *, const struct fileinfo *)) {
     
-        for (int i = 0; i < num_files; i++) {
-            struct fileinfo *info;
-            if ((info = start_fileinfo(repo, files[i], mode)) == NULL) {
-                error("could not open file: %s", files[i]);
-                continue;
-            }
-
-            (*cmd_cb)(repo, dircache, info);
-            
-            end_fileinfo(info);
+    for (int i = 0; i < in->size; i++) {
+        struct fileinfo *info;
+        char *norm_path = in->norm_paths[i];
+        if ((info = start_fileinfo(repo, norm_path, mode)) == NULL) {
+            error("could not open file: %s", norm_path);
+            continue;
         }
+
+        (*cmd_cb)(repo, dircache, info);
+        
+        end_fileinfo(info);
+    }
 }
 
 void do_add(const git_repo *repo, git_dircache *dircache, const struct fileinfo *info) {
-    if (is_file_ignored(repo, info)) {
-        return;
-    }
-
     git_obj *blob;
     if (add_file_to_dc(dircache, info, &blob) != 0) {
         error("could not add file: %s", info->norm_path);
@@ -155,7 +149,7 @@ int run_add(arg_list *args) {
     }
     filter_ignores(result, repo);
     git_dircache *dircache = create_dircache(repo);
-    do_command_each_file(repo, dircache, "rb", result->norm_paths, result->size, do_add);
+    do_command_each_file(repo, dircache, "rb", result, do_add);
     write_index(repo, dircache);
 
     free_dircache(dircache);
@@ -179,7 +173,7 @@ int run_rm(arg_list *args) {
         expand_arg(result, repo, args->cmd_args[i]);
     }
     git_dircache *dircache = create_dircache(repo);
-    do_command_each_file(repo, dircache, "rb", result->norm_paths, result->size, do_remove);
+    do_command_each_file(repo, dircache, "rb", result, do_remove);
     write_index(repo, dircache);
 
     free_dircache(dircache);

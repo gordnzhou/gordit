@@ -56,6 +56,9 @@ fs_dirent *fs_readdir(DIR *dir, const char *foldername){
         return NULL;
     }
 
+    // attempting to overwrite ret with path from current ret
+    assert(foldername != ret.de_path);
+
     char path[PATH_MAX];
     fs_path_join(foldername, ent->d_name, path);
     

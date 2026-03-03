@@ -2,6 +2,7 @@
 #define PATHSPEC_H
 
 #include "repo.h"
+#include "utils.h"
 
 typedef struct pathspec_result {
     int size;
@@ -16,7 +17,7 @@ void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg);
 
 void filter_ignores(pathspec_result *result, const git_repo *repo);
 
-pathspec_result *repo_all_files(const git_repo *repo, int tracked_only);
+strarr_t *repo_all_files(const git_repo *repo, int tracked_only);
 
 void free_pathspec_result(pathspec_result *result);
 

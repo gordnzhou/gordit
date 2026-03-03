@@ -2,28 +2,47 @@
 #define REFS_H
 
 #include "repo.h"
+#include "utils.h"
 
 #define START_BRANCH "main"
 #define INDIRECT_REF_HEADER "ref: "
 
-void write_ref(const git_repo *repo, const char *ref_path, const obj_hash *commit);
-void del_ref(const git_repo *repo, const char *ref_path);
-int read_ref(const git_repo *repo, const char *ref_path, obj_hash *out_hash);
+enum ref_type {
+    REF_LOCAL,
+    REF_TAG,
+    REF_REMOTE,
+    DIRECT,
+};
 
-void write_branch_local(const git_repo *repo, char *name, const obj_hash *commit);
-void delete_branch_local(const git_repo *repo, char *name);
-int read_branch_local(const git_repo *repo, char *name, obj_hash *out_hash);
+typedef struct {
+    enum ref_type type;
+    char *name; // NULL if type is DIRECT
+    int empty_hash;
+    obj_hash hash;
+} git_ref;
 
-// hash should point to commit object (lightweight tag) OR tag object (annotated tag)
-void write_tag(const git_repo *repo, char *name, const obj_hash *hash);
-void delete_tag(const git_repo *repo, char *name);
-int read_tag(const git_repo *repo, char *name, obj_hash *out_hash);
+int              del_ref(const git_repo *repo, enum ref_type type, const char *name);
+git_ref        *read_ref(const git_repo *repo, enum ref_type type, const char *name, int fail_if_empty);
+void           write_ref(const git_repo *repo, enum ref_type type, const char *ref_name, const obj_hash *commit);
+strarr_t *refs_all_names(const git_repo *repo, enum ref_type type);
 
-void detach_head(const git_repo *repo, const obj_hash *commit);
-void move_head(const git_repo *repo, char *branch_name);
+int is_valid_branch_name(const char *branch_name);
 
-int is_head_detached(const git_repo *repo);
+// @return 1 if head_ref is not a local branch
+int is_head_detached(git_ref *head_ref);
 
-char *read_head(const git_repo *repo, int *is_detached);
+// updates contents of HEAD file to point to ref. If type is DIRECT (no name), 
+// HEAD's content is replaced with the ref hash, leaving HEAD in detached state
+void move_head(const git_repo *repo, git_ref *ref);
+
+// reads contents of HEAD file.
+// @return HEAD's ref with hash resolved. if HEAD is just a hash, type is DIRECT and so name field is empty
+git_ref *read_head(const git_repo *repo);
+
+// Creates backup file of HEAD's resolved hash
+// @return 1 on backup, 0 if nothing to backup
+int backup_head(const git_repo *repo);
+
+void free_ref(git_ref *ref);
 
 #endif

@@ -47,40 +47,33 @@ int fs_closedir(DIR *dir) {
     return closedir(dir);
 }
 
-static fs_dirent ret;
-static struct stat st;
-
-fs_dirent *fs_readdir(DIR *dir, const char *foldername){
+int fs_readdir(DIR *dir, fs_dirent *out, const char *foldername){
     struct dirent *ent;
     if ((ent = readdir(dir)) == NULL) {
-        return NULL;
+        return 0;
     }
 
-    // attempting to overwrite ret with path from current ret
-    assert(foldername != ret.de_path);
+    out->de_ino = ent->d_ino;
+    snprintf(out->de_name, PATH_MAX, "%s", ent->d_name);
+
+    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+        return fs_readdir(dir, out, foldername);
+    }
 
     char path[PATH_MAX];
     fs_path_join(foldername, ent->d_name, path);
-    
-    memset(&ret, 0, sizeof(ret));
-    ret.de_ino = ent->d_ino;
-    snprintf(ret.de_name, PATH_MAX, "%s", ent->d_name);
-    snprintf(ret.de_path, PATH_MAX, "%s", path);
+    snprintf(out->de_path, PATH_MAX, "%s", path);
 
-    if (strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0) {
-        if (stat(path, &st) != 0) {
-            perror("stat");
-            return NULL;
-        }
-
-        ret.de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;
-        ret.de_size = st.st_size;
-        ret.de_mode = st.st_mode;
-    } else {
-        ret.de_type = FS_ISDIR;
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        perror("stat");
+        return -1;
     }
+    out->de_type = S_ISDIR(st.st_mode) ? FS_ISDIR : FS_ISFILE;
+    out->de_size = st.st_size;
+    out->de_mode = st.st_mode;
     
-    return &ret;
+    return 1;
 }
 
 int fs_getinfo(const char *path, struct fs_statinfo *statinfo) {

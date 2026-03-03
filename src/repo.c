@@ -29,20 +29,12 @@ unsigned int git_mode_to_stat(unsigned int git_mode) {
 // Walks up `path` until it finds a directory with git folder. Fills `repo_root` with that directory path. 
 // @returns 1 on successful find and 0 if unsuccessful.
 int git_find_root(const char *path, char *repo_root) {
-    DIR *dir;
-    if ((dir = fs_opendir(path)) == NULL) {
-        return 0;
+    char git_path[PATH_MAX];
+    fs_path_join(path, GIT_FOLDER, git_path);
+    if (fs_file_exists(git_path)) {
+        snprintf(repo_root, PATH_MAX, "%s", path);
+        return 1;
     }
-
-    fs_dirent *ent;
-    while ((ent = fs_readdir(dir, path)) != NULL) {
-        if (strcmp(ent->de_name, GIT_FOLDER) == 0) {
-            snprintf(repo_root, PATH_MAX, "%s", path);
-            fs_closedir(dir);
-            return 1;
-        }
-    }
-    fs_closedir(dir);
 
     char parent[PATH_MAX];
     fs_path_dirname(path, parent);
@@ -55,11 +47,10 @@ int git_find_root(const char *path, char *repo_root) {
 
 void init_repo_context(git_repo *repo, const char *repo_root) {
     snprintf(repo->root_path, PATH_MAX, "%s", repo_root);
-    fs_path_join(repo_root, GIT_FOLDER, repo->git_folder_path);
-    fs_path_join(repo->git_folder_path, REFS_NAME, repo->refs_path);
-    fs_path_join(repo->git_folder_path, OBJS_NAME, repo->objects_path);
-    fs_path_join(repo->git_folder_path, INDEX_NAME, repo->index_path);
-    fs_path_join(repo->git_folder_path, HEAD_NAME, repo->head_path);
+
+#define X(name, path) fs_path_join(repo_root, path, repo->name);
+    REPO_PATHS
+#undef X
 }
 
 const git_repo *get_working_repo(const char *cwd) {
@@ -79,22 +70,25 @@ int create_repo_folder(const char *cwd) {
 
     int exists = fs_file_exists(repo->head_path);
 
-    char local_refs_folder[PATH_MAX], tag_refs_folder[PATH_MAX];
-    fs_path_join(repo->root_path, LOCAL_REFS_FOLDER, local_refs_folder);
-    fs_path_join(repo->root_path, TAG_REFS_FOLDER, tag_refs_folder);
+    if (exists) {
+        // TODO: reinitalize repo
+        free(repo);
+        return exists;
+    }
 
     mode_t mode = 0700;
-    if (fs_mkdir(repo->git_folder_path, mode) == -1 ||
+    if (fs_mkdir(repo->git_path, mode) == -1 ||
         fs_mkdir(repo->objects_path, mode) == -1 ||
         fs_mkdir(repo->refs_path, mode) == -1 ||
-        fs_mkdir(local_refs_folder, mode) == -1 ||
-        fs_mkdir(tag_refs_folder, mode) == -1) {
+        fs_mkdir(repo->local_refs_path, mode) == -1 ||
+        fs_mkdir(repo->tag_refs_path, mode) == -1) {
         fatal("could not initialize repository: %s", strerror(errno));
     }
 
-    if (!exists) {
-        move_head(repo, START_BRANCH);
-    }
+    git_ref start_ref = { 0 };
+    start_ref.type = REF_LOCAL;
+    start_ref.name = START_BRANCH;
+    move_head(repo, &start_ref);
 
     free(repo);
    
@@ -124,16 +118,6 @@ int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
     }
 
     return 0;
-}
-
-int is_path_in_repo(const git_repo *repo, const char *abs_path) {
-    int root_len = strlen(repo->root_path);
-    int path_len = strlen(abs_path);
-    int rel_len = path_len - root_len;
-
-    return rel_len > 0 && 
-        memcmp(abs_path, repo->root_path, root_len) == 0 &&
-        strstr(abs_path, GIT_FOLDER) == NULL;
 }
 
 void repo_rel_path(const git_repo *repo, const char *abs_path, char *out) {

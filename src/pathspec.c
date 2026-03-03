@@ -46,12 +46,15 @@ void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) 
     if (fs_file_exists(arg)) {
         char abs_path[PATH_MAX];
         if (fs_path_abs(arg, abs_path) == 0) {
-            if (is_path_in_repo(repo, abs_path)) {
-                add_pathspec_result(result, normalize_path(repo, abs_path));
-                return;
+            if (!is_path_in_folder(repo->root_path, abs_path)) {
+                fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
+            }
+            if (is_path_in_folder(repo->git_path, abs_path)) {
+                fatal("'%s' is inside repo's internal git folder", abs_path);
             }
 
-            fatal("'%s' is outside of current repository (%s)", repo->root_path);
+            add_pathspec_result(result, normalize_path(repo, abs_path));
+            return;
         }
 
         if (strlen(arg) + 1 > PATH_MAX) {
@@ -92,32 +95,20 @@ int path_matches_pathspec(const char *filepath, const char *spec) {
 }
 
 int check_ignores(const char *folder, const char *fullpath, const git_repo *repo) {
-    DIR *dir;
-    if ((dir = fs_opendir(folder)) == NULL) {
-        fatal("could not check ignores as could not open directory %s", folder);
-    }
-
-    fs_dirent *ent;
-    char line[PATH_MAX];
-    while ((ent = fs_readdir(dir, folder)) != NULL) {
-        if (strcmp(ent->de_name, GIT_IGNORE_NAME) == 0) {
-            FILE *fptr = fopen(ent->de_path, "r");
-            if (fptr == NULL) {
-                continue;
+    char ignore_path[PATH_MAX];
+    fs_path_join(folder, GIT_IGNORE_NAME, ignore_path);
+    if (fs_file_exists(ignore_path)) {
+        FILE *fptr = sfopen(ignore_path, "r");
+        char line[PATH_MAX];
+        while (fgets(line, PATH_MAX, fptr) != NULL) {
+            if (path_matches_pathspec(fullpath, line)) {
+                fclose(fptr);
+                return 1;
             }
-
-            while (fgets(line, PATH_MAX, fptr) != NULL) {
-                if (path_matches_pathspec(fullpath, line)) {
-                    fclose(fptr);
-                    return 1;
-                }
-            }
-
-            fclose(fptr);
         }
+        fclose(fptr);
     }
 
-    fs_closedir(dir);
     if (strcmp(repo->root_path, folder) == 0) {
         return 0;
     }
@@ -149,13 +140,10 @@ void filter_ignores(pathspec_result *result, const git_repo *repo) {
     result->size = new_size;
 }
 
-void folder_add_files(pathspec_result *result, const git_repo *repo, const char *folder, int tracked_only, char **ignore_arr) {
-    DIR *dir;
-    if ((dir = fs_opendir(folder)) == NULL) {
-        fatal("could not open directory %s", folder);
-    }
+void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder, int tracked_only, strarr_t *ignore_arr) {
+    DIR *dir = sopendir(folder);
 
-    char **ignore_arr_cur = NULL;
+    strarr_t *ignore_arr_cur = strarr_new();
     if (tracked_only) {
         char ignore_list_path[PATH_MAX];
         fs_path_join(folder, GIT_IGNORE_NAME, ignore_list_path);
@@ -164,59 +152,59 @@ void folder_add_files(pathspec_result *result, const git_repo *repo, const char 
             FILE *fptr = sfopen(ignore_list_path, "r");
             char line[PATH_MAX];
             while (fgets(line, PATH_MAX, fptr) != NULL) {
-                DA_PUSH(ignore_arr_cur, sstrdup(line));
+                strarr_push(ignore_arr_cur, line);
             }
             fclose(fptr);
         }
     }
 
-    fs_dirent *ent;
-    while ((ent = fs_readdir(dir, folder)) != NULL) {
-        if (strcmp(ent->de_name, ".") == 0 || 
-            strcmp(ent->de_name, "..") == 0 ||
-            strcmp(ent->de_name, ".git") == 0 || 
-            strcmp(ent->de_name, GIT_FOLDER) == 0) {
+    fs_dirent ent = { 0 };
+    int ret = 0;
+    while ((ret = fs_readdir(dir, &ent, folder)) != 0) {
+        if (ret == -1) {
             continue;
         }
 
-        char *norm_path = normalize_path(repo, ent->de_path);
+        if (strcmp(ent.de_name, ".git") == 0 || strcmp(ent.de_name, GIT_FOLDER) == 0) {
+            continue;
+        }
+
+        char *norm_path = normalize_path(repo, ent.de_path);
         int ignore = 0;
         if (tracked_only) {
-            for (size_t i = 0; i < DA_LEN(ignore_arr_cur); i++) {
-                if (path_matches_pathspec(norm_path, ignore_arr_cur[i])) {
+            for (size_t i = 0; i < ignore_arr->len + ignore_arr_cur->len; i++) {
+                const char *spec = (i < ignore_arr->len) ? 
+                    ignore_arr->data[i] : ignore_arr_cur->data[i - ignore_arr->len];
+
+                if (path_matches_pathspec(norm_path, spec)) {
                     ignore = 1;
                     break;
                 } 
             }
-            for (size_t i = 0; i < DA_LEN(ignore_arr); i++) {
-                if (path_matches_pathspec(norm_path, ignore_arr[i])) {
-                    ignore = 1;
-                    break;
-                } 
-            }
-  
         }
 
         if (ignore) {
             continue;
         }
 
-        if (ent->de_type == FS_ISFILE) {
-            add_pathspec_result(result, norm_path);
-        } else if (ent->de_type == FS_ISDIR) {
-            char *subfolder = sstrdup(ent->de_path);
+        if (ent.de_type == FS_ISFILE) {
+            strarr_push(result, norm_path);
+        } else if (ent.de_type == FS_ISDIR) {
+            char *subfolder = sstrdup(ent.de_path);
             folder_add_files(result, repo, subfolder, tracked_only, ignore_arr_cur);
             free(subfolder);
             free(norm_path);
         }
     }
 
-    fs_closedir(dir);
-    DA_FREE_DEEP(ignore_arr_cur, free);
+    closedir(dir);
+    strarr_free(ignore_arr_cur);
 }
 
-pathspec_result *repo_all_files(const git_repo *repo, int tracked_only) {
-    pathspec_result *result = init_pathspec_result();
-    folder_add_files(result, repo, repo->root_path, tracked_only, NULL);
+strarr_t *repo_all_files(const git_repo *repo, int tracked_only) {
+    strarr_t *result = strarr_new();
+    strarr_t *ignore_arr = strarr_new();
+    folder_add_files(result, repo, repo->root_path, tracked_only, ignore_arr);
+    strarr_free(ignore_arr);
     return result;
 }

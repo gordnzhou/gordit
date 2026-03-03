@@ -145,7 +145,7 @@ void print_commit(const git_obj_commit *commit) {
     free(buf);
 }
 
-git_obj_commit *create_commit_from_disk(const git_repo *repo, obj_hash hash) { 
+git_obj_commit *create_commit_from_disk(const git_repo *repo, const obj_hash hash) { 
     git_obj *obj = smalloc(sizeof(*obj));
     create_obj_from_disk(obj, repo, hash, OBJ_TYPE_COMMIT);
 
@@ -159,22 +159,4 @@ git_obj_commit *create_commit_from_disk(const git_repo *repo, obj_hash hash) {
     free(contents);
     free_obj(obj);
     return commit;
-}
-
-git_obj_commit *read_head_commit(const git_repo *repo, int *is_detached) {
-    obj_hash head_commit_hash;
-
-    char *head_content = read_head(repo, is_detached);
-    if (*is_detached) {
-        warn("head is not pointing to any branch, commit will be easily lost!");
-        string_to_hash(&head_commit_hash, head_content);
-    } else {
-        if (read_ref(repo, head_content, &head_commit_hash) < 0) {
-            return NULL;
-        }
-    }
-
-    free(head_content);
-
-    return create_commit_from_disk(repo, head_commit_hash);
 }

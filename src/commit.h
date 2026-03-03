@@ -28,8 +28,6 @@ git_obj_commit *create_commit(git_obj_tree *tree,
 git_obj *create_commit_obj(const git_obj_commit *commit);
 
 // deserialize commit struct from object text
-git_obj_commit *create_commit_from_disk(const git_repo *repo, obj_hash hash);
+git_obj_commit *create_commit_from_disk(const git_repo *repo, const obj_hash hash);
 
-// @return HEAD's commit object or NULL if no commits
-git_obj_commit *read_head_commit(const git_repo *repo, int *is_detached);
 #endif

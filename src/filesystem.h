@@ -7,10 +7,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
-    
-#ifndef PATH_MAX
-    #define PATH_MAX 4096
-#endif
+#include <limits.h> 
 
 #ifdef _WIN32 
     #define PATH_SEP '\\'
@@ -34,16 +31,18 @@ typedef struct fs_statinfo {
 #define FS_ISDIR 0
 
 typedef struct fs_dirent {
-    char de_name[PATH_MAX];
-    char de_path[PATH_MAX];
     long de_ino;
-    unsigned int de_mode;
     size_t de_size;
+    unsigned int de_mode;
     int de_type; // `FS_FILE` or `FS_ISDIR`
+    char de_path[PATH_MAX];
+    char de_name[PATH_MAX];
 } fs_dirent;
 
 // Wrapper around `readdir` that has more guaranteed fields.
-fs_dirent *fs_readdir(DIR *, const char *directory_path);
+// Skips "." and ".." entries
+// @return 1 on success, 0 if no more entries, -1 if error
+int fs_readdir(DIR *dir, fs_dirent *out, const char *foldername);
 
 // Same as `mkdir` in POSIX. Note: mode is ignored on Win32.
 // @return 1 if folder already exists, 0 on success, otherwise -1

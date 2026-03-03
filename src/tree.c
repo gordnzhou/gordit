@@ -26,6 +26,8 @@ void print_tree_recur(git_obj_tree *tree, const char *prefix) {
             snprintf(new_prefix, len, "%s%s", prefix, INDENT);
             print_tree_recur(entry->u.tree, new_prefix);
             free(new_prefix);
+        } else {
+            fatal("tree is corrupted");
         }
     }
 }
@@ -224,33 +226,34 @@ git_obj_tree *create_tree_from_path(const git_repo *repo, const char *folderpath
 
 void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, git_obj_tree *tree) {
     char *path_copy = sstrdup(folderpath);
-    fs_dirent *ent;
-
-    while ((ent = fs_readdir(dir, path_copy)) != NULL) {
-        if (strcmp(ent->de_name, ".") == 0 || strcmp(ent->de_name, "..") == 0) {
+    fs_dirent ent = { 0 };
+    
+    int ret;
+    while ((ret = fs_readdir(dir, &ent, path_copy)) != 0) {
+        if (ret == -1) {
             continue;
         }
-
+ 
         git_tree_entry *tree_ent = smalloc(sizeof(*tree_ent));
-        snprintf(tree_ent->name, PATH_MAX, "%s", ent->de_name);
-        tree_ent->git_mode = stat_mode_to_git(ent->de_mode);
+        snprintf(tree_ent->name, PATH_MAX, "%s", ent.de_name);
+        tree_ent->git_mode = stat_mode_to_git(ent.de_mode);
 
-        if (ent->de_type == FS_ISFILE) {
+        if (ent.de_type == FS_ISFILE) {
             fileinfo *finfo;
-            if ((finfo = start_fileinfo(repo, ent->de_path, "rb")) == NULL) {
-                fatal("could not get file info for %s: %s", ent->de_path, strerror(errno));
+            if ((finfo = start_fileinfo(repo, ent.de_path, "rb")) == NULL) {
+                fatal("could not get file info for %s: %s", ent.de_path, strerror(errno));
             }
 
             git_obj *blob = create_blob_from_file(finfo);
             if (blob == NULL) {
-                fatal("could not create blob from file %s: %s", ent->de_path, strerror(errno));
+                fatal("could not create blob from file %s: %s", ent.de_path, strerror(errno));
             }
 
             end_fileinfo(finfo);
             copy_hash(&(tree_ent->u.blob_hash), &(blob->hash));
             tree_ent->type = OBJ_TYPE_BLOB;
-        } else if (ent->de_type == FS_ISDIR) {
-            tree_ent->u.tree = create_tree_recur(repo, ent->de_path);
+        } else if (ent.de_type == FS_ISDIR) {
+            tree_ent->u.tree = create_tree_recur(repo, ent.de_path);
             tree_ent->type = OBJ_TYPE_TREE;
         }
 
@@ -261,14 +264,11 @@ void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath,
 }
 
 git_obj_tree *create_tree_recur(const git_repo *repo, const char *folderpath) {
-    DIR *dir;
-    if ((dir = fs_opendir(folderpath)) == NULL) {
-        fatal("could not open directory: %s", folderpath);
-    }
+    DIR *dir = sopendir(folderpath);
 
     git_obj_tree *tree = init_tree();
     create_tree_entries(repo, dir, folderpath, tree);
-    fs_closedir(dir);
+    closedir(dir);
 
     qsort(tree->entries, tree->size, sizeof(git_tree_entry *), cmp_tree_entries);
 

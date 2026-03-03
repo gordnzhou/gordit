@@ -1,3 +1,4 @@
+#include <string.h>
 
 #include "status.h"
 #include "dircache.h"
@@ -6,135 +7,120 @@
 #include "refs.h"
 #include "pathspec.h"
 #include "logging.h"
+#include "diff.h"
 
 void print_repo_status(const git_repo *repo) {
-    int detached_head;
     git_dircache *dircache = create_dircache(repo);
-    git_obj_commit *commit = read_head_commit(repo, &detached_head);
-    if (detached_head) {
+    git_ref *head_ref = read_head(repo);
+    
+    git_obj_commit *commit = head_ref->empty_hash ? NULL : 
+        create_commit_from_disk(repo, head_ref->hash);
+    git_obj_tree *commit_tree = commit == NULL ? NULL : read_tree_from_disk(repo, commit->tree_hash);
+    int commit_tree_size = commit == NULL ? 0 : tree_num_blobs(commit_tree);
+
+    strarr_t *unignored_files = repo_all_files(repo, 1);
+
+    git_diff uncommitted = { 0 };
+    git_diff unstaged    = { 0 };
+    git_diff untracked   = { 0 };
+    uncommitted.entries  = smalloc((dircache->num_entries + commit_tree_size)*sizeof(diff_entry));
+    unstaged.entries     = smalloc(dircache->num_entries*sizeof(diff_entry));
+    untracked.entries    = smalloc(unignored_files->len*sizeof(diff_entry));
+
+    diff_index_tree(&uncommitted, dircache, commit_tree, commit_tree_size);
+    diff_repo_index_tracked(&unstaged, repo, dircache);
+    diff_repo_index_untracked(&untracked, unignored_files, dircache);
+
+    #define INDENT "   "
+
+    if (is_head_detached(head_ref)) {
         printf("HEAD is detached\n");
     } else {
-        char *head_content = read_head(repo, &detached_head);
-        printf("On branch '%s'\n", fs_path_pbasename(head_content));
-        free(head_content);
+        printf("On branch '%s'\n", head_ref->name);
     }
 
-    if (commit == NULL) {
-        printf("\nThis repo has no commits\n");
-        free_dircache(dircache);
-        return;
-    }
-    
-    git_obj_tree *commit_tree = read_tree_from_disk(repo, commit->tree_hash);
-    int commit_tree_size = tree_num_blobs(commit_tree);
-    git_tree_entry **commit_blob_list = smalloc(commit_tree_size * sizeof(git_tree_entry *));
-    tree_blobs_flat(commit_blob_list, commit_tree_size, commit_tree);
-
-    int list_size = commit_tree_size + dircache->num_entries;
-    int names_idx = 0;
-    char **names  = scalloc(list_size, sizeof(char *));
-    char **status = scalloc(list_size, sizeof(char *));
-
-    int tree_i = 0;
-    int index_i = 0;
-    while (tree_i < commit_tree_size || index_i < dircache->num_entries) {
-        git_tree_entry *tree_entry = NULL;
-        git_index_entry *index_entry = NULL;
-
-        int cmp = 0;
-        if (tree_i == commit_tree_size) {
-            index_entry = dircache->entries[index_i];
-            cmp = -1;
-        } else if (index_i == dircache->num_entries) {
-            tree_entry = commit_blob_list[tree_i];
-            cmp = 1;
-        } else {
-            tree_entry = commit_blob_list[tree_i];
-            index_entry = dircache->entries[index_i];
-            cmp = strcmp(index_entry->name, tree_entry->name);
-        }
-
-        if (cmp == 0) {
-            if (strcmp(tree_entry->u.blob_hash, index_entry->hash) != 0) {
-                names[names_idx] = index_entry->name;
-                status[names_idx] = "modified";
-                names_idx++;
-            }
-
-            tree_i++;
-            index_i++;
-        } else if (cmp < 0) {
-            names[names_idx] = index_entry->name;
-            status[names_idx] = "   added";
-            names_idx++;
-
-            index_i++;
-        } else {
-            names[names_idx] = tree_entry->name;
-            status[names_idx] = " deleted";
-            names_idx++;
-
-            tree_i++;
-        }
-    }
-
-    if (names_idx > 0) {
+    if (uncommitted.size) {
         printf("\nChanges to be commited:\n");
-        for (int i = 0; i < names_idx; i++) {
-            printf("    %s:  %s\n", status[i], names[i]);
+        for (int i = 0; i < uncommitted.size; i++) { 
+            char *status = NULL;
+            if (uncommitted.entries[i].type == ADDED)    status = "   added";
+            if (uncommitted.entries[i].type == MODIFIED) status = "modified";
+            if (uncommitted.entries[i].type == REMOVED)  status = " removed";
+            assert(status);
+            printf("%s%s:  %s\n", INDENT, status, uncommitted.entries[i].name);
         }
     } else {
         printf("\nNo changes to be commited\n");
     }
 
-
-    printf("\nChanges not staged for commit:\n");
-    char path[PATH_MAX];
-    for (int i = 0; i < dircache->num_entries; i++) {
-        git_index_entry *entry = dircache->entries[i];
-        fs_path_join(repo->root_path, entry->name, path);
-
-        if (!fs_file_exists(path)) {
-            printf("     deleted: %s\n", entry->name);
-            continue;
+    if (unstaged.size) {
+        printf("\nChanges not staged for commit:\n");
+        for (int i = 0; i < unstaged.size; i++) {
+            char *status = NULL;
+            if (unstaged.entries[i].type == MODIFIED) status = "modified";
+            if (unstaged.entries[i].type == REMOVED)  status = " removed";
+            assert(status);
+            printf("%s%s: %s\n", INDENT, status, unstaged.entries[i].name);
         }
-
-        fileinfo *info = start_fileinfo(repo, entry->name, "rb");
-        if (info == NULL) {
-            fatal("could not open %s\n", entry->name);
-        }
-        
-        if (!is_stat_same(&(info->stat), &(entry->info))) {
-            git_obj *blob = create_blob_from_file(info);
-            if (!blob) {
-                continue;
-            }
-
-            if (strcmp(blob->hash, entry->hash) != 0) {
-                printf("    modified: %s\n", entry->name);
-            }
-
-            free_obj(blob);
-        }
-        end_fileinfo(info);
     }
-
-    // TODO: show untracked files (files NOT in index AND NOT ignnored)
-    printf("\nUntracked files:\n");
-    pathspec_result *unignored_files = repo_all_files(repo, 1);
-    for (int i = 0; i < unignored_files->size; i++) {
-        char *name = unignored_files->norm_paths[i];
-        if (dircache_find_file(dircache, name) == NULL) {
-            printf("    %s\n", name);
+   
+    if (untracked.size) {
+        printf("\nUntracked files:\n");
+        for (int i = 0; i < untracked.size; i++) {
+            assert(untracked.entries[i].type == ADDED);
+            printf("%s%s\n", INDENT, untracked.entries[i].name);
         }
     }
 
-    free_pathspec_result(unignored_files);
+    if (!commit) {
+        printf("\nThis repo has no commits\n");
+    } else if (uncommitted.size == 0) {
 
-    free(names);
-    free(status);
-    free(commit_blob_list);
-    free_tree(commit_tree);
-    free_commit(commit);
+    }
+
+    free(uncommitted.entries);
+    free(unstaged.entries);
+    free(untracked.entries);
+    strarr_free(unignored_files);
+    if (commit_tree) free_tree(commit_tree);
+    if (commit) free_commit(commit);
+    free_ref(head_ref);
     free_dircache(dircache);
+}
+
+void print_commit_tree(const git_repo *repo) {
+    git_ref *head_ref = read_head(repo);
+
+    if (head_ref->empty_hash) {
+        fatal("no commits on branch '%s'", head_ref->name);
+    }
+
+    if (is_head_detached(head_ref)) {
+        printf("HEAD -> %s (detached)\n\n", head_ref->hash);
+    } else {
+        printf("HEAD -> %s -> %s\n\n", head_ref->name, head_ref->hash);
+    }
+
+    // TODO: print commits reachable by HEAD
+    // - better print_commit
+    // - handle commits multiple 2+ parents, 
+    // - option to filter log by branch
+
+    git_obj_commit *commit = create_commit_from_disk(repo, head_ref->hash);
+    printf("COMMIT %s\n", head_ref->hash);
+    while (1) {
+        print_commit(commit);
+        printf("\n");
+
+        if (commit->num_parents < 1) {
+            break;
+        }
+
+        git_obj_commit *parent_commit = create_commit_from_disk(repo, commit->parents[0]);
+        printf("COMMIT %s\n", commit->parents[0]);
+        free_commit(commit);
+        commit = parent_commit;
+    }
+
+    free_commit(commit);
 }

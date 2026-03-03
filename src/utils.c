@@ -4,6 +4,7 @@
 
 #include "utils.h"
 #include "logging.h"
+#include "filesystem.h"
 
 void *smalloc(size_t size) {
     void *ret = malloc(size);
@@ -54,38 +55,46 @@ char *sgetcwd(char *pathbuf, size_t pathsize) {
     return ret;
 }
 
+DIR *sopendir(const char *folderpath) {
+    DIR *ret = fs_opendir(folderpath);
+    if (!ret) {
+        fatal("could not open directory '%s'", folderpath);
+    }
+    return ret;
+}
+
 void freadb_full(void *dest, size_t filesize, FILE *file, const char *name) {
     size_t read = fread(dest, 1, filesize, file);
     if (read != filesize) {
-        fatal("could not fully read to: %s", name);
+        fatal("could not fully read to '%s'", name);
     }
 }
 
 void fwriteb_full(void *src, size_t filesize, FILE *file, const char *name) {
     size_t written = fwrite(src, 1, filesize, file);
     if (written != filesize) {
-        fatal("could not fully write to: %s", name);
+        fatal("could not fully write to '%s'", name);
     }
 }
 
 void sfputs(const char *str, FILE *file, const char *name) {
     if (fputs(str, file) < 0) {
-        fatal("could not write string to %s: %s", name, strerror(errno));
+        fatal("could not write string to '%s': %s", name, strerror(errno));
     }
 }
 
 void sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize) {
     if (fgets(buf, buf_len, file) == NULL) {
-        fatal("could not read string from %s: %s", name, strerror(errno));
+        fatal("could not read string from '%s': %s", name, strerror(errno));
     }
     if (strict_bufsize && strlen(buf) != buf_len - 1) {
-        fatal("could not fully read string from %s", name);
+        fatal("could not fully read string from '%s'", name);
     }
 }
 
 void sremove(const char *filepath) {
-    if (remove(filepath) == 0) {
-        fatal("could not delete %s:", filepath, strerror(errno));
+    if (remove(filepath) != 0) {
+        fatal("could not delete '%s': %s", filepath, strerror(errno));
     }
 }
 
@@ -107,3 +116,35 @@ char *sstrndup(const char *src, size_t size) {
     dst[len] = '\0';
     return dst;
 }
+
+int is_path_in_folder(const char *abs_folder_path, const char *abs_path) {
+    int folder_len = strlen(abs_folder_path);
+    int path_len = strlen(abs_path);
+
+    return strncmp(abs_folder_path, abs_path, folder_len) == 0 &&
+        (path_len == folder_len || abs_path[folder_len] == '/' || abs_path[folder_len] == '\\');
+}
+
+strarr_t *strarr_new() {
+    strarr_t *arr = smalloc(sizeof(*arr));
+    arr->len = 0;
+    arr->capacity = DA_CAP_INIT;
+    arr->data = smalloc(arr->capacity*sizeof(char *));
+    return arr;
+}
+
+void strarr_push(strarr_t *arr, const char *str) {
+    if (arr->len >= arr->capacity) {
+        arr->capacity *= DA_SCALE_FACTOR;
+        arr->data = srealloc(arr->data, arr->capacity*sizeof(char *));
+    }
+    arr->data[arr->len++] = sstrdup(str);
+}
+
+void strarr_free(strarr_t *arr) {
+    for (size_t i = 0; i < arr->len; i++) {
+        free(arr->data[i]);
+    }
+    free(arr);
+}
+

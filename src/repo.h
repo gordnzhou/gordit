@@ -10,35 +10,51 @@ typedef char obj_hash[OBJ_HASH_SIZE];
 #define GIT_MODE_FILE_X 0100755
 #define GIT_MODE_FILE_R 0100644
 
+#define GIT_IGNORE_NAME ".gorditignore"
+
 #define GIT_FOLDER  ".gordit"
 #define REFS_NAME   "refs"
 #define OBJS_NAME   "objects"
 #define HEAD_NAME   "HEAD"
 #define INDEX_NAME  "index"
-#define REFS_FOLDER GIT_FOLDER "/" REFS_NAME
-#define OBJS_FOLDER GIT_FOLDER "/" OBJS_NAME
-#define HEAD_PATH GIT_FOLDER   "/" HEAD_NAME
-#define INDEX_PATH GIT_FOLDER  "/" INDEX_NAME
+#define BACKUP_HEAD_NAME "ORIG_HEAD"
+#define MERGE_HEAD_NAME  "MERGE_HEAD"
+#define LOCAL_REFS_NAME "heads"
+#define REMOTE_REFS_NAME "remotes"
+#define TAG_REFS_NAME "tags"
 
-#define LOCAL_REFS_NAME  REFS_NAME "/heads"
-#define REMOTE_REFS_NAME REFS_NAME "/remotes"
-#define TAG_REFS_NAME    REFS_NAME "/tags"
-#define LOCAL_REFS_FOLDER  GIT_FOLDER "/" LOCAL_REFS_NAME
-#define REMOTE_REFS_FOLDER GIT_FOLDER "/" REMOTE_REFS_NAME
-#define TAG_REFS_FOLDER    GIT_FOLDER "/" TAG_REFS_NAME
+#define GIT_PATH_SEP "/"
 
-#define GIT_IGNORE_NAME ".gorditignore"
+#define GIT_FOLDER_PATH GIT_FOLDER
+#define INDEX_PATH      GIT_FOLDER GIT_PATH_SEP INDEX_NAME
+#define HEAD_PATH       GIT_FOLDER GIT_PATH_SEP HEAD_NAME
+#define BAC_HEAD_PATH   GIT_FOLDER GIT_PATH_SEP BACKUP_HEAD_NAME
+#define MERGE_HEAD_PATH GIT_FOLDER GIT_PATH_SEP MERGE_HEAD_NAME
+#define OBJECTS_PATH    GIT_FOLDER GIT_PATH_SEP OBJS_NAME
+#define REFS_PATH       GIT_FOLDER GIT_PATH_SEP REFS_NAME
+#define LOC_REFS_PATH   REFS_PATH GIT_PATH_SEP "heads"
+#define TAG_REFS_PATH   REFS_PATH GIT_PATH_SEP "tags"
+#define REM_REFS_PATH   REFS_PATH GIT_PATH_SEP "remotes"
+
+#define REPO_PATHS                      \
+    X(git_path, GIT_FOLDER_PATH)        \
+    X(index_path, INDEX_PATH)           \
+    X(head_path, HEAD_PATH)             \
+    X(objects_path, OBJECTS_PATH)       \
+    X(refs_path, REFS_PATH)             \
+    X(local_refs_path, LOC_REFS_PATH)   \
+    X(remote_refs_path, REM_REFS_PATH)  \
+    X(tag_refs_path, TAG_REFS_PATH)     \
+    X(backup_head_path, BAC_HEAD_PATH)  \
+    X(merge_head_path, MERGE_HEAD_PATH) \
 
 typedef struct {
     char root_path[PATH_MAX];
-    char git_folder_path[PATH_MAX];
-    char index_path[PATH_MAX];
-    char head_path[PATH_MAX];
-    char objects_path[PATH_MAX];
 
-    char refs_path[PATH_MAX];
-    char local_refs_path[PATH_MAX];
-    char remote_refs_path[PATH_MAX];
+#define X(name, val) char name[PATH_MAX];
+    REPO_PATHS
+#undef X
+
 } git_repo;
 
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
@@ -58,11 +74,7 @@ int create_repo_folder(const char *cwd);
 // @return 1 if path already exists, 0 otherwise
 int obj_store_path(const git_repo *, const obj_hash, char *out);
 
-// @return 1 if path is inside of repo and not in git folder
-int is_path_in_repo(const git_repo *, const char *);
-
 // used for name in index and trees
 // @returns '/' seperated path relative to repo root.
 void repo_rel_path(const git_repo *, const char *, char *out);
-
 #endif

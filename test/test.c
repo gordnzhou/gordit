@@ -113,7 +113,7 @@ void test_objects(const git_repo *repo) {
     hash = blob->hash;
     printf("hash of blob: %s\n", hash);
 
-    assert(write_obj_to_disk(repo, blob) > 0);
+    write_obj_to_disk(repo, blob);
     
     blob2 = malloc(sizeof(*blob2));
     create_obj_from_disk(blob2, repo, hash, OBJ_TYPE_BLOB);

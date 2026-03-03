@@ -62,9 +62,8 @@ int delete_obj_from_disk(obj_hash hash);
 
 void create_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash hash, enum obj_type type);
 
-// Transform blob object to its original file and saves it to `filepath`.
-// Assumes directory already exists
-// @return 0 if successful, -1 if folder doesnt exist or other errors.
+// Restores blob to original file at given path.
+// @return 0 if successful, -1 unable to restore
 int create_file_from_blob(const char *filepath, const git_obj*);
 
 // Inits blob struct representing `filepath`.

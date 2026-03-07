@@ -5,6 +5,7 @@
 #include "logging.h"
 #include "utils.h"
 #include "filesystem.h"
+#include "objects.h"
 
 int is_valid_branch_name(const char *branch_name) {
     char f = branch_name[0];
@@ -70,7 +71,7 @@ git_ref *read_ref(const git_repo *repo, enum ref_type type, const char *name, in
     if (!fs_file_exists(path)) {
 
         if (fail_if_empty) {
-            fatal("ref not found at '%s'", path);
+            fatal("ref '%s' does not point to any hash", path);
         }
 
         ref->empty_hash = 1;
@@ -149,7 +150,7 @@ git_ref *read_head(const git_repo *repo) {
     git_ref *ref = smalloc(sizeof(*ref));
     ref->type = DIRECT;
     ref->name = NULL;
-    snprintf(ref->hash, OBJ_HASH_SIZE, "%s", buf);
+    string_to_hash(&(ref->hash), buf);
     return ref;
 }
 

@@ -4,6 +4,13 @@
 #include "repo.h"
 #include "utils.h"
 
+typedef struct {
+    char name[PATH_MAX];
+    char abs_path[PATH_MAX];
+    int  exists;
+    int  ignored;
+} git_file_arg;
+
 typedef struct pathspec_result {
     int size;
     int capacity;

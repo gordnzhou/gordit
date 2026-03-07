@@ -63,12 +63,12 @@ unsigned int stat_mode_to_git(unsigned int st_mode);
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int git_mode_to_stat(unsigned int git_mode);
  
-// gets repo context 
-const git_repo *get_working_repo(const char *cwd);
+// gets repo of current working directory
+const git_repo *repo_init_context();
 
-// Initialize git folder in cwd, including subfolders, index and HEAD.
-// @returns 0 on success, 1 if git folder already in cwd, -1 otherwise. 
-int create_repo_folder(const char *cwd);
+// Initialize git folder in root, including subfolders, index and HEAD.
+// @returns 0 on success, 1 if git folder already in root, -1 otherwise. 
+int create_repo_folder(char *repo_root);
 
 // gets path of object in repo's objects folder
 // @return 1 if path already exists, 0 otherwise
@@ -77,4 +77,6 @@ int obj_store_path(const git_repo *, const obj_hash, char *out);
 // used for name in index and trees
 // @returns '/' seperated path relative to repo root.
 void repo_rel_path(const git_repo *, const char *, char *out);
+
+void repo_full_path(const git_repo *, const char *, char *out);
 #endif

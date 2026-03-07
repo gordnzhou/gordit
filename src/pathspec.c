@@ -5,10 +5,15 @@
 #include "logging.h"
 #include "utils.h"
 
-char *normalize_path(const git_repo *repo, const char *filepath) {
+char *normalize_path(const git_repo *repo, const char *filepath, int already_relative) {
     int size = strlen(filepath);
     char *norm_path = smalloc(size + 1);
-    repo_rel_path(repo, filepath, norm_path);
+
+    if (already_relative) {
+        snprintf(norm_path, PATH_MAX, "%s", filepath);
+    } else {
+        repo_rel_path(repo, filepath, norm_path);
+    }
 
     for (int i = 0; i < size; i++) {
         if (norm_path[i] == '\\') {
@@ -46,6 +51,8 @@ void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) 
     if (fs_file_exists(arg)) {
         char abs_path[PATH_MAX];
         if (fs_path_abs(arg, abs_path) == 0) {
+            path_clean_seps(abs_path);
+
             if (!is_path_in_folder(repo->root_path, abs_path)) {
                 fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
             }
@@ -53,7 +60,7 @@ void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) 
                 fatal("'%s' is inside repo's internal git folder", abs_path);
             }
 
-            add_pathspec_result(result, normalize_path(repo, abs_path));
+            add_pathspec_result(result, normalize_path(repo, abs_path, 0));
             return;
         }
 
@@ -63,7 +70,15 @@ void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) 
         fatal("unable to get absolute path of '%s'", arg);
     } 
 
-    fatal("unable to parse '%s' as path", arg);
+    
+
+// TODO: accept paths that dont exist (yet)
+//  - string that can be parsed as relative paths
+//  - assume they are relative to repo root
+
+// TODO: accept glob patterns 
+// - can expand into multiple paths
+    // fatal("unable to parse '%s' as path", arg);
 }
 
 char *clean_str(const char *str) {
@@ -169,7 +184,7 @@ void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder
             continue;
         }
 
-        char *norm_path = normalize_path(repo, ent.de_path);
+        char *norm_path = normalize_path(repo, ent.de_path, 0);
         int ignore = 0;
         if (tracked_only) {
             for (size_t i = 0; i < ignore_arr->len + ignore_arr_cur->len; i++) {

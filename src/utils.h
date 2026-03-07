@@ -35,6 +35,7 @@ char *sstrndup(const char *src, size_t size);
 
 int is_path_in_folder(const char *abs_folder_path, const char *abs_path);
 
+void path_clean_seps(char *path);
 
 // Quick way to get dynamic array at the cost of complexity from macros
 // and obscuring the type (int* is a array?)

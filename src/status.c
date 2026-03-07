@@ -40,7 +40,7 @@ void print_repo_status(const git_repo *repo) {
     }
 
     if (uncommitted.size) {
-        printf("\nChanges to be commited:\n");
+        printf("\nChanges to be committed:\n");
         for (int i = 0; i < uncommitted.size; i++) { 
             char *status = NULL;
             if (uncommitted.entries[i].type == ADDED)    status = "   added";
@@ -49,8 +49,6 @@ void print_repo_status(const git_repo *repo) {
             assert(status);
             printf("%s%s:  %s\n", INDENT, status, uncommitted.entries[i].name);
         }
-    } else {
-        printf("\nNo changes to be commited\n");
     }
 
     if (unstaged.size) {
@@ -74,8 +72,16 @@ void print_repo_status(const git_repo *repo) {
 
     if (!commit) {
         printf("\nThis repo has no commits\n");
+    } else if (uncommitted.size == 0 && unstaged.size == 0 && untracked.size == 0) {
+        printf("\nWorking tree is clean, nothing to commit or add\n");
+    } else if (unstaged.size == 0) {
+        if (untracked.size == 0) {
+            printf("\nNo changes added to be committed\n");
+        } else {
+            printf("\nNo changes added but there are untracked files\n");
+        }
     } else if (uncommitted.size == 0) {
-
+        printf("No changes to commit");
     }
 
     free(uncommitted.entries);

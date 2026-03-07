@@ -148,3 +148,12 @@ void strarr_free(strarr_t *arr) {
     free(arr);
 }
 
+void path_clean_seps(char *path) {
+    int len = strlen(path);
+    for (int i = 0; i < PATH_MAX && i < len; i++) {
+        if (path[i] == '\\') {
+            path[i] = '/';
+        }
+    }
+}
+

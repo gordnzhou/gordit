@@ -34,15 +34,13 @@ void print_dircache(git_dircache *);
 // parse contents of repo's index into struct
 git_dircache *create_dircache(const git_repo *);
 
-// adds file to dircache.
-// @param blob if file is new, creates blob from file and sets it to this
-// @return 0 on success, -1 if unable to create blob
-int add_file_to_dc(git_dircache *, const fileinfo *, git_obj **blob);
+// @return 1 if an index already contains the file with exact same contents
+int  dircache_matching_entry(const git_dircache *dircache, const fileinfo *info);
 
-// removes file's entries from repo's index.
-// @param filepath ASSUME it is a unix path relative to repo root
+void dircache_add(git_dircache *dircache, const fileinfo *finfo, const git_obj *file_blob);
+
 // @return 0 if removed, -1 if not in index
-int remove_file_from_dc(git_dircache *, const fileinfo *);
+int  dircache_remove(git_dircache *dircache, const char *name);
 
 void write_index(const git_repo *, git_dircache *);
 

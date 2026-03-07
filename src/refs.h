@@ -35,7 +35,8 @@ int is_head_detached(git_ref *head_ref);
 // HEAD's content is replaced with the ref hash, leaving HEAD in detached state
 void move_head(const git_repo *repo, git_ref *ref);
 
-// reads contents of HEAD file.
+// reads contents of HEAD file. make sure to handle case where HEAD has no hash 
+// AND if HEAD is detached (if current branch information is needed)
 // @return HEAD's ref with hash resolved. if HEAD is just a hash, type is DIRECT and so name field is empty
 git_ref *read_head(const git_repo *repo);
 

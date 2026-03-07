@@ -37,6 +37,31 @@ void print_tree(git_obj_tree *tree) {
     print_tree_recur(tree, "");
 }
 
+git_tree_entry **tree_find_blob(const git_obj_tree *root, const char *name) {
+    int at_base = 0;
+    const char *end = strchr(name, '/');
+    if (end == NULL) {
+        at_base = 1;
+        end = name + strlen(name);
+    } 
+    size_t first_component = end - name;
+
+    // could do hashing or binary search if linear search is too slow
+    for (int i = 0; i < root->size; i++) {
+        git_tree_entry *entry = root->entries[i];
+        if (memcmp(name, entry->name, first_component) != 0) {
+            continue;    
+        }
+
+        if (at_base) {
+            return entry->type == OBJ_TYPE_BLOB ? &entry : NULL;
+        } else {
+            return entry->type == OBJ_TYPE_TREE ? tree_find_blob(entry->u.tree, end + 1) : NULL;
+        }
+    }
+
+    return NULL;
+}
 
 int cmp_tree_entries(const void *p1, const void *p2) {
     const git_tree_entry *te1 = *(const git_tree_entry * const *)p1;

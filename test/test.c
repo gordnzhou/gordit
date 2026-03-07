@@ -182,9 +182,8 @@ void test_index(const git_repo * repo) {
 
     struct fileinfo *info = start_fileinfo(repo, path, "rb");
     assert(info != NULL);
-
-    git_obj *blob;
-    assert(add_file_to_dc(dircache, info, &blob) == 0);
+    git_obj *blob = create_blob_from_file(info);
+    dircache_add(dircache, info, blob);
     end_fileinfo(info);
 
     print_dircache(dircache);
@@ -200,20 +199,18 @@ void test_index(const git_repo * repo) {
     assert(tree != NULL);
     print_tree(tree);
 
-    // assert(remove_file_from_dc(dircache, info) != -1);
+    // assert(dircache_remove(dircache, info->norm_path) != -1);
 
     write_index(repo, dircache);
 
     free_dircache(dircache);
     free_tree(tree);
+    free_obj(blob);
     printf("================INDEX TESTS PASSED=============\n");
 }
 
 int main() {
-    char cwd[PATH_MAX];
-    sgetcwd(cwd, sizeof(cwd));
-    
-    const git_repo *repo = get_working_repo(cwd);
+    const git_repo *repo = repo_init_context();
     assert(repo != NULL && "Cannot get repo"); 
 
     test_filesystem();

@@ -11,16 +11,17 @@
     X(status, run_status)     \
     X(log, run_log)           \
     X(branch, run_branch)     \
-    X(checkout, run_checkout) \
+    X(diff, run_diff)         \
+    X(checkout, run_checkout) 
 
-#define CMD_PROTOTYPE(name, func) int func(arg_list *);
+#define CMD_PROTOTYPE(name, func) int func(const arg_list *);
     COMMANDS_LIST(CMD_PROTOTYPE)
 
-int run_no_command(arg_list *);
+int run_no_command(const arg_list *);
 
 typedef struct {
     const char *name;
-    int (*handler)(arg_list *);
+    int (*handler)(const arg_list *);
 } command_entry;
 
 #define TABLE_ENTRY(name, func) { #name, func },

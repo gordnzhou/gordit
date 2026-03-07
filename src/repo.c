@@ -30,7 +30,7 @@ unsigned int git_mode_to_stat(unsigned int git_mode) {
 // @returns 1 on successful find and 0 if unsuccessful.
 int git_find_root(const char *path, char *repo_root) {
     char git_path[PATH_MAX];
-    fs_path_join(path, GIT_FOLDER, git_path);
+    fs_path_join(path, HEAD_PATH, git_path);
     if (fs_file_exists(git_path)) {
         snprintf(repo_root, PATH_MAX, "%s", path);
         return 1;
@@ -53,7 +53,11 @@ void init_repo_context(git_repo *repo, const char *repo_root) {
 #undef X
 }
 
-const git_repo *get_working_repo(const char *cwd) {
+const git_repo *repo_init_context() {
+    char cwd[PATH_MAX];
+    sgetcwd(cwd, PATH_MAX);
+    path_clean_seps(cwd);
+
     char repo_root[PATH_MAX];
     if (!git_find_root(cwd, repo_root)) {
         fatal("not in a repository");
@@ -64,9 +68,10 @@ const git_repo *get_working_repo(const char *cwd) {
     return repo;
 }
 
-int create_repo_folder(const char *cwd) {
+int create_repo_folder(char *repo_root) {
+    path_clean_seps(repo_root);
     git_repo *repo = smalloc(sizeof *repo);
-    init_repo_context(repo, cwd);
+    init_repo_context(repo, repo_root);
 
     int exists = fs_file_exists(repo->head_path);
 
@@ -129,6 +134,18 @@ void repo_rel_path(const git_repo *repo, const char *abs_path, char *out) {
 
     snprintf(out, PATH_MAX, "%s", abs_path + root_len + 1);
      
+    char *ptr = out;
+    while (*ptr != '\0') {
+        if (*ptr == '\\') {
+            *ptr = '/';
+        }
+        ptr++;
+    }
+}
+
+void repo_full_path(const git_repo *repo, const char *norm_path, char *out) {
+    fs_path_join(repo->root_path, norm_path, out);
+
     char *ptr = out;
     while (*ptr != '\0') {
         if (*ptr == '\\') {

@@ -3,28 +3,33 @@
 
 #include "objects.h"
 
+enum linediff_op {
+    KEEP = 0,
+    DELETE,
+    INSERT
+};
+
 typedef struct {
-    size_t lcount;
+    int lcount;
     char **lines;
 } git_textfile;
 
 typedef struct {
     git_textfile *text;
-    int line;
-    int op; // 0 for remove, 1 for add
+    size_t line;
+    enum linediff_op op;
+    int show;
 } git_linediff;
 
 typedef struct {
-    int dlcount;
+    int count;
     git_linediff *diff_lines;
 } git_textdiff;
 
-git_textfile *textfile_new(fileinfo *finfo);
-// git_textfile *textfile_from_blob(git_obj *blob);
+git_textfile *textfile_from_file(fileinfo *finfo);
+git_textfile *textfile_from_blob(git_obj *blob);
 void textfile_free(git_textfile *text);
 
-git_textdiff *textfile_diff_myers(git_textfile *a, git_textfile *b);
-
-void textdiff_print(git_textdiff *diff);
+void textdiff_myers_print(git_textfile *a, const char *a_name, git_textfile *b, const char *b_name);
 
 #endif

@@ -11,6 +11,7 @@
 #include "pathspec.h"
 #include "utils.h"
 #include "args.h"
+#include "textdiff.h"
 
 int do_commit(const git_repo *repo, 
     git_dircache *dircache, 
@@ -34,7 +35,7 @@ int do_commit(const git_repo *repo,
 
     // TODO: read MERGE_HEAD for possibly 1+ other commit parents
     if (!head_ref->empty_hash) {
-        git_obj_commit *parent_commit = create_commit_from_disk(repo, head_ref->hash);
+        git_obj_commit *parent_commit = read_commit_from_disk(repo, head_ref->hash);
         git_obj_tree *parent_tree = read_tree_from_disk(repo, parent_commit->tree_hash);
         if (is_tree_and_dc_same(dircache, parent_tree)) {
             free_ref(head_ref);
@@ -75,65 +76,6 @@ int do_commit(const git_repo *repo,
     return 0;
 }
 
-void do_command_each_file(const git_repo *repo, git_dircache *dircache, 
-    char *mode, const pathspec_result *in, 
-    void (*cmd_cb)(const git_repo *, git_dircache *, const struct fileinfo *)) {
-    
-    for (int i = 0; i < in->size; i++) {
-        struct fileinfo *info;
-        char *norm_path = in->norm_paths[i];
-        if ((info = start_fileinfo(repo, norm_path, mode)) == NULL) {
-            error("could not open file: %s", norm_path);
-            continue;
-        }
-
-        (*cmd_cb)(repo, dircache, info);
-        
-        end_fileinfo(info);
-    }
-}
-
-
-
-void do_add(const git_repo *repo, git_dircache *dircache, const struct fileinfo *info) {
-    if (dircache_matching_entry(dircache, info)) {
-        DEBUG_PRINT("skipping add to '%s' to index", info->norm_path);
-        return;
-    }
-
-    git_obj *blob = create_blob_from_file(info);
-    if (!blob) {
-        fatal("could not add '%s': blob creation failed", info->norm_path);
-    }
-
-    dircache_add(dircache, info, blob);
-
-    write_obj_to_disk(repo, blob);
-    printf("wrote %s to disk for %s\n", blob->hash, info->norm_path);
-
-    free_obj(blob);
-}
-
-void do_remove(const git_repo *repo, git_dircache *dircache, const struct fileinfo *info) {
-    git_index_entry **in_index = dircache_find_file(dircache, info->norm_path);
-    if (!in_index) {
-        return;
-    }
-
-    git_index_entry *entry = *in_index;
-    if (is_file_changed_unstaged(entry, info)) {
-        fatal("'%s' has unstaged changes", entry->name);
-    }
-    // TODO: also check that entry->hash == hash of latest commit's version or FAIL
-
-    (void)repo;
-    if (dircache_remove(dircache, info->norm_path) != 0) {
-       DEBUG_PRINT("removing '%s' from index but it is not in dircache", info->abs_path); 
-    }
-
-    sremove(info->abs_path);
-}
-
 int run_init(const arg_list *args) {
     char cwd[PATH_MAX];
     sgetcwd(cwd, sizeof(cwd));
@@ -160,10 +102,35 @@ int run_add(const arg_list *args) {
     for (int i = 0; i < args->cmd_args_count; i++) {
         expand_arg(result, repo, args->cmd_args[i]);
     }
-    // show warning for filtered ignores
-    filter_ignores(result, repo);
-    do_command_each_file(repo, dircache, "rb", result, do_add);
-    print_dircache(dircache);
+
+    for (int i = 0; i < result->size; i++) {
+        git_file_arg *file_arg = result->args[i];
+        if (file_arg->ignored || !file_arg->exists) {
+            continue;
+        }
+
+        fileinfo *info = start_fileinfo(repo, file_arg->name, "rb");
+        if (dircache_matching_entry(dircache, info)) {
+            DEBUG_PRINT("skipping add to '%s' to index", info->norm_path);
+            end_fileinfo(info);
+            continue;
+        }
+
+        git_obj *blob = create_blob_from_file(info);
+        if (!blob) {
+            fatal("could not add '%s': blob creation failed", info->norm_path);
+        }
+
+        dircache_add(dircache, info, blob);
+
+        write_obj_to_disk(repo, blob);
+        printf("wrote %s to disk for %s\n", blob->hash, info->norm_path);
+
+        free_obj(blob);
+        end_fileinfo(info);
+    }
+
+    // print_dircache(dircache);
     write_index(repo, dircache);
 
     free_dircache(dircache);
@@ -179,12 +146,40 @@ int run_rm(const arg_list *args) {
     }
     
     const git_repo *repo = repo_init_context();
+    git_dircache *dircache = create_dircache(repo);
+
     pathspec_result *result = init_pathspec_result();
     for (int i = 0; i < args->cmd_args_count; i++) {
         expand_arg(result, repo, args->cmd_args[i]);
     }
-    git_dircache *dircache = create_dircache(repo);
-    do_command_each_file(repo, dircache, "rb", result, do_remove);
+
+    for (int i = 0; i < result->size; i++) {
+        git_file_arg *file_arg = result->args[i];
+        if (file_arg->ignored || !file_arg->exists) {
+            continue;
+        }
+
+        fileinfo *info = start_fileinfo(repo, file_arg->name, "rb");
+        git_index_entry **in_index = dircache_find_file(dircache, info->norm_path);
+        if (!in_index) {
+            end_fileinfo(info);
+            continue;
+        }
+
+        git_index_entry *entry = *in_index;
+        if (is_file_changed_unstaged(entry, info)) {
+            fatal("'%s' has unstaged changes", entry->name);
+        }
+        // TODO: also check that entry->hash == hash of latest commit's version or FAIL
+
+        (void)repo;
+        if (dircache_remove(dircache, info->norm_path) != 0) {
+        DEBUG_PRINT("removing '%s' from index but it is not in dircache", info->abs_path); 
+        }
+
+        sremove(info->abs_path);
+    }
+
     write_index(repo, dircache);
 
     free_dircache(dircache);
@@ -325,15 +320,16 @@ int run_checkout(const arg_list *args) {
     int status = 0;
 
     git_ref* ref = read_ref(repo, REF_LOCAL, branch_name, 1);
-    git_obj_commit *target_commit = create_commit_from_disk(repo, ref->hash);
+    git_obj_commit *target_commit = read_commit_from_disk(repo, ref->hash);
     git_obj_tree *target_tree = read_tree_from_disk(repo, target_commit->tree_hash);
 
     char full_path[PATH_MAX];
     if (result->size) {
         for (int i = 0; i < result->size; i++) {
-            git_tree_entry **in_other = tree_find_blob(target_tree, result->norm_paths[i]);
+            git_file_arg *file_arg = result->args[i];
+            git_tree_entry **in_other = tree_find_blob(target_tree, file_arg->name);
             if (in_other == NULL) {
-                error("'%s' is not in %s's snapshot", result->norm_paths[i], branch_name);
+                error("'%s' is not in %s's snapshot", file_arg->name, branch_name);
                 status = 1;
                 continue;
             }
@@ -341,8 +337,7 @@ int run_checkout(const arg_list *args) {
             assert(entry->type == OBJ_TYPE_BLOB);
            
             repo_full_path(repo, entry->name, full_path);
-            git_obj *blob = smalloc(sizeof(*blob));
-            create_obj_from_disk(blob, repo, entry->u.blob_hash, OBJ_TYPE_BLOB);
+            git_obj *blob = read_blob_from_disk(repo, entry->u.blob_hash);
 
             if (create_file_from_blob(full_path, blob)) {
                 fatal("failed to restore '%s' to object %s", full_path, blob->hash);
@@ -360,7 +355,7 @@ int run_checkout(const arg_list *args) {
         }
 
         git_dircache *dircache = create_dircache(repo);
-        git_obj_commit *head_commit = head_ref->empty_hash ? NULL : create_commit_from_disk(repo, head_ref->hash);
+        git_obj_commit *head_commit = head_ref->empty_hash ? NULL : read_commit_from_disk(repo, head_ref->hash);
         git_obj_tree *head_tree = head_commit ? read_tree_from_disk(repo, head_commit->tree_hash) : NULL;
 
         int head_size = tree_num_blobs(head_tree);
@@ -393,22 +388,17 @@ int run_checkout(const arg_list *args) {
                 }
                 dircache_remove(dircache, entry->name);
             } else {
-                git_obj *blob = smalloc(sizeof(*blob));
-                create_obj_from_disk(blob, repo, *(entry->new_hash), OBJ_TYPE_BLOB);
-
+                git_obj *blob = read_blob_from_disk(repo, *(entry->new_hash));
                 if (create_file_from_blob(full_path, blob)) {
                     fatal("failed to restore '%s' to object %s", entry->name, blob->hash);
                 }
 
-                struct fileinfo *info;
-                if ((info = start_fileinfo(repo, entry->name, "rb")) == NULL) {
-                    fatal("could not open file: %s", entry->name);
-                }
-                
+                struct fileinfo *info = start_fileinfo(repo, entry->name, "rb");
                 dircache_add(dircache, info, blob);
-                DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
                 free_obj(blob);
                 end_fileinfo(info);
+
+                DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
             }
         }
 
@@ -440,11 +430,28 @@ int run_diff(const arg_list *args) {
     for (int i = 0; i < diff->size; i++) {
         diff_entry *entry = diff->entries + i;
         if (entry->type == REMOVED) {
-            
+            printf("removed: %s\n", entry->name); 
         } else if (entry->type == ADDED) {
-
+            printf("added: %s\n", entry->name);
         } else if (entry->type == MODIFIED) {
+            printf("modified: %s\n", entry->name);
 
+            fileinfo *info = start_fileinfo(repo, entry->name, "rb");
+            if (is_like_binary(info->fptr)) {
+                end_fileinfo(info);
+                continue;
+            }
+            git_textfile *new_text = textfile_from_file(info);
+            end_fileinfo(info);
+
+            git_obj *blob = read_blob_from_disk(repo, *(entry->old_hash));
+            git_textfile *old_text = textfile_from_blob(blob);
+            free_obj(blob);
+
+            textdiff_myers_print(new_text, entry->name, old_text, entry->name);
+
+            textfile_free(old_text);
+            textfile_free(new_text);
         }
     }
 

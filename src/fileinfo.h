@@ -10,6 +10,7 @@ typedef struct fileinfo {
     FILE *fptr;
 } fileinfo;
 
+// will crash if unable to get file info
 // @param norm_path should be paths returned by a pathspec
 struct fileinfo *start_fileinfo(const git_repo *repo, const char *norm_path, const char *mode);
 

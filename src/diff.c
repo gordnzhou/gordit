@@ -204,13 +204,13 @@ void diff_repo_index_tracked(git_diff *out, const git_repo *repo, const git_dirc
             out->entries[out->size++] = (diff_entry){ 
                 .type = MODIFIED, 
                 .name = entry->name,
-                .old_hash = NULL,
+                .old_hash = &(entry->hash),
                 .new_hash = NULL };
         } else if (changed == -1) {
             out->entries[out->size++] = (diff_entry){ 
                 .type = REMOVED, 
                 .name = entry->name,
-                .old_hash = NULL,
+                .old_hash = &(entry->hash),
                 .new_hash = NULL };
         }
     }

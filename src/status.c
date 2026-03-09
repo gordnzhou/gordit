@@ -14,7 +14,7 @@ void print_repo_status(const git_repo *repo) {
     git_ref *head_ref = read_head(repo);
     
     git_obj_commit *commit = head_ref->empty_hash ? NULL : 
-        create_commit_from_disk(repo, head_ref->hash);
+        read_commit_from_disk(repo, head_ref->hash);
     git_obj_tree *commit_tree = commit == NULL ? NULL : read_tree_from_disk(repo, commit->tree_hash);
     int commit_tree_size = commit == NULL ? 0 : tree_num_blobs(commit_tree);
 
@@ -112,7 +112,7 @@ void print_commit_tree(const git_repo *repo) {
     // - handle commits multiple 2+ parents, 
     // - option to filter log by branch
 
-    git_obj_commit *commit = create_commit_from_disk(repo, head_ref->hash);
+    git_obj_commit *commit = read_commit_from_disk(repo, head_ref->hash);
     printf("COMMIT %s\n", head_ref->hash);
     while (1) {
         print_commit(commit);
@@ -122,7 +122,7 @@ void print_commit_tree(const git_repo *repo) {
             break;
         }
 
-        git_obj_commit *parent_commit = create_commit_from_disk(repo, commit->parents[0]);
+        git_obj_commit *parent_commit = read_commit_from_disk(repo, commit->parents[0]);
         printf("COMMIT %s\n", commit->parents[0]);
         free_commit(commit);
         commit = parent_commit;

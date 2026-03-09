@@ -54,7 +54,7 @@ git_tree_entry **tree_find_blob(const git_obj_tree *root, const char *name) {
         }
 
         if (at_base) {
-            return entry->type == OBJ_TYPE_BLOB ? &entry : NULL;
+            return entry->type == OBJ_TYPE_BLOB ? root->entries + i : NULL;
         } else {
             return entry->type == OBJ_TYPE_TREE ? tree_find_blob(entry->u.tree, end + 1) : NULL;
         }
@@ -158,8 +158,7 @@ int write_tree_to_disk(const git_repo *repo, const git_obj_tree *tree, int check
 
 git_obj_tree *deserialize_tree_recur(const git_repo *repo, obj_hash hash, const char *path) {
     git_obj_tree *tree = init_tree();
-  
-    create_obj_from_disk(&(tree->obj), repo, hash, OBJ_TYPE_TREE);
+    read_obj_from_disk(&(tree->obj), repo, hash, OBJ_TYPE_TREE);
     
     char *entries_copy = obj_content_string(&(tree->obj));
 
@@ -252,7 +251,7 @@ git_obj_tree *create_tree_from_path(const git_repo *repo, const char *folderpath
 void create_tree_entries(const git_repo *repo, DIR *dir, const char *folderpath, git_obj_tree *tree) {
     char *path_copy = sstrdup(folderpath);
     fs_dirent ent = { 0 };
-    
+
     int ret;
     while ((ret = fs_readdir(dir, &ent, path_copy)) != 0) {
         if (ret == -1) {

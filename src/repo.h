@@ -2,9 +2,7 @@
 #define REPO_H
 
 #include <filesystem.h>
-
-#define OBJ_HASH_SIZE 41
-typedef char obj_hash[OBJ_HASH_SIZE];
+#include "hash.h"
 
 #define GIT_MODE_DIR 0040000
 #define GIT_MODE_FILE_X 0100755

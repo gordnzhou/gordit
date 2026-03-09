@@ -39,13 +39,7 @@ static inline const char *obj_type_string(enum obj_type type)
     return "";
 }
 
-void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash);
-
-void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes);
-
-void copy_hash(obj_hash *out, const obj_hash* in);
-
-void string_to_hash(obj_hash *out, const char *in);
+int is_like_binary(FILE *fptr);
 
 void free_obj(git_obj *obj);
 
@@ -60,7 +54,9 @@ int write_obj_to_disk(const git_repo *repo, const git_obj *obj);
 
 int delete_obj_from_disk(obj_hash hash);
 
-void create_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash hash, enum obj_type type);
+void read_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash hash, enum obj_type type);
+
+git_obj *read_blob_from_disk(const git_repo *repo, const obj_hash hash);
 
 // Restores blob to original file at given path.
 // @return 0 if successful, -1 unable to restore

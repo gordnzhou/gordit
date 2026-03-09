@@ -145,9 +145,9 @@ void print_commit(const git_obj_commit *commit) {
     free(buf);
 }
 
-git_obj_commit *create_commit_from_disk(const git_repo *repo, const obj_hash hash) { 
+git_obj_commit *read_commit_from_disk(const git_repo *repo, const obj_hash hash) { 
     git_obj *obj = smalloc(sizeof(*obj));
-    create_obj_from_disk(obj, repo, hash, OBJ_TYPE_COMMIT);
+    read_obj_from_disk(obj, repo, hash, OBJ_TYPE_COMMIT);
 
     char *contents = obj_content_string(obj);
 

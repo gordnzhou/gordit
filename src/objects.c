@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <openssl/sha.h>
 #include <zlib.h>
 
 #include "repo.h"
@@ -93,34 +92,6 @@ size_t write_norm_bytes(unsigned char *buf, size_t buf_size, FILE *fptr) {
     }
 
     return i;
-}
-
-void copy_hash(obj_hash *out, const obj_hash *in) {
-    snprintf(*out, OBJ_HASH_SIZE, "%s", *in);
-}
-
-void string_to_hash(obj_hash *out, const char *in) {
-    assert(strlen(in) < sizeof(obj_hash));
-    copy_hash(out, (obj_hash *)in);
-}
-
-void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash) {
-    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        snprintf(*out_hash + (i << 1), OBJ_HASH_SIZE, "%02x", bytes[i]);
-    } 
-}
-
-void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes) {
-    for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        char hex[3] = {hash[i << 1], hash[(i << 1) + 1], '\0'};
-        sscanf(hex, "%2hhx", &out_bytes[i]);
-    }
-}
-
-void hash_data(unsigned char *data, size_t size, obj_hash *o_hash) {
-    unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1(data, size, hash);
-    hash_from_bytes(hash, o_hash);
 }
 
 void create_git_obj(const unsigned char *file_contents, size_t size, enum obj_type type, git_obj *obj) {
@@ -262,7 +233,7 @@ int check_obj_header(git_obj *obj) {
     return 0;
 }
 
-void create_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash hash, enum obj_type type) { 
+void read_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash hash, enum obj_type type) { 
     snprintf(obj->hash, OBJ_HASH_SIZE, "%s", hash);
     obj->type = type;
 
@@ -291,6 +262,12 @@ void create_obj_from_disk(git_obj *obj, const git_repo *repo, const obj_hash has
     if (check_obj_header(obj) < 0) {
         fatal("could not object '%s' as a %s\n", obj->hash, obj->type);
     }
+}
+
+git_obj *read_blob_from_disk(const git_repo *repo, const obj_hash hash) {
+    git_obj *blob = smalloc(sizeof(*blob));
+    read_obj_from_disk(blob, repo, hash, OBJ_TYPE_BLOB);
+    return blob;
 }
 
 char *obj_content_string(const git_obj *obj) {

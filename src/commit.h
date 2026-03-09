@@ -28,6 +28,6 @@ git_obj_commit *create_commit(git_obj_tree *tree,
 git_obj *create_commit_obj(const git_obj_commit *commit);
 
 // deserialize commit struct from object text
-git_obj_commit *create_commit_from_disk(const git_repo *repo, const obj_hash hash);
+git_obj_commit *read_commit_from_disk(const git_repo *repo, const obj_hash hash);
 
 #endif

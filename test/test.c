@@ -115,8 +115,7 @@ void test_objects(const git_repo *repo) {
 
     write_obj_to_disk(repo, blob);
     
-    blob2 = malloc(sizeof(*blob2));
-    create_obj_from_disk(blob2, repo, hash, OBJ_TYPE_BLOB);
+    blob2 = read_blob_from_disk(repo, hash);
     assert(blob2 != NULL);
     ASSERT_STREQ(blob2->hash, hash)
     assert(blob2->size == blob->size);
@@ -153,7 +152,7 @@ void test_objects(const git_repo *repo) {
     commit_hash = &(commit_obj->hash);
     write_obj_to_disk(repo, commit_obj);
 
-    commit2 = create_commit_from_disk(repo, *commit_hash);
+    commit2 = read_commit_from_disk(repo, *commit_hash);
     ASSERT_STREQ(commit2->tree_hash, commit->tree_hash);
     ASSERT_STREQ(commit2->msg, commit->msg);
     ASSERT_STREQ(commit2->author_name, commit->author_name);

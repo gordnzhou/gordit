@@ -35,6 +35,7 @@ void diff_trees(git_diff *out, const git_obj_tree *new, int new_size, const git_
 // index is NEW and tree is OLD
 void diff_index_tree(git_diff *out, const git_dircache *dircache, const git_obj_tree *tree, int tree_size);
 
+// modified and added entries do not have their new hashes saved
 // repo is NEW and dircache is OLD
 void diff_repo_index(git_diff *out, const git_repo *repo, const strarr_t *repo_files, const git_dircache *dircache);
 

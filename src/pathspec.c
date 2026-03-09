@@ -5,82 +5,6 @@
 #include "logging.h"
 #include "utils.h"
 
-char *normalize_path(const git_repo *repo, const char *filepath, int already_relative) {
-    int size = strlen(filepath);
-    char *norm_path = smalloc(size + 1);
-
-    if (already_relative) {
-        snprintf(norm_path, PATH_MAX, "%s", filepath);
-    } else {
-        repo_rel_path(repo, filepath, norm_path);
-    }
-
-    for (int i = 0; i < size; i++) {
-        if (norm_path[i] == '\\') {
-            norm_path[i] = '/';
-        }
-    }
-
-    return norm_path;
-}
-
-pathspec_result *init_pathspec_result() {
-    pathspec_result *result = smalloc(sizeof(*result));
-    result->size = 0;
-    result->capacity = 8;
-    result->norm_paths = smalloc(result->capacity * sizeof(char *));
-    return result;
-}
-
-void free_pathspec_result(pathspec_result *result) {
-    for (int i = 0; i < result->size; i++) {
-        free(result->norm_paths[i]);
-    }
-    free(result);
-}
-
-void add_pathspec_result(pathspec_result *result, char *norm_path) {
-    if (result->size >= result->capacity) {
-        result->capacity *= 2;
-        result->norm_paths = srealloc(result->norm_paths, result->capacity * sizeof(char *));
-    } 
-    result->norm_paths[result->size++] = norm_path;
-}
-
-void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) {
-    if (fs_file_exists(arg)) {
-        char abs_path[PATH_MAX];
-        if (fs_path_abs(arg, abs_path) == 0) {
-            path_clean_seps(abs_path);
-
-            if (!is_path_in_folder(repo->root_path, abs_path)) {
-                fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
-            }
-            if (is_path_in_folder(repo->git_path, abs_path)) {
-                fatal("'%s' is inside repo's internal git folder", abs_path);
-            }
-
-            add_pathspec_result(result, normalize_path(repo, abs_path, 0));
-            return;
-        }
-
-        if (strlen(arg) + 1 > PATH_MAX) {
-            fatal("path '%s' is too long (> %d)", arg, PATH_MAX);
-        } 
-        fatal("unable to get absolute path of '%s'", arg);
-    } 
-
-    
-
-// TODO: accept paths that dont exist (yet)
-//  - string that can be parsed as relative paths
-//  - assume they are relative to repo root
-
-// TODO: accept glob patterns 
-// - can expand into multiple paths
-    // fatal("unable to parse '%s' as path", arg);
-}
-
 char *clean_str(const char *str) {
     int len = strlen(str);
     char *out = smalloc(len + 1);
@@ -133,26 +57,94 @@ int check_ignores(const char *folder, const char *fullpath, const git_repo *repo
     return check_ignores(parent, fullpath, repo);
 }
 
-int is_file_ignored(const git_repo *repo, const char *path) {
-    char full_path[PATH_MAX], imm_parent[PATH_MAX];
-    fs_path_join(repo->root_path, path, full_path);
-    fs_path_dirname(full_path, imm_parent);
-    return check_ignores(imm_parent, full_path, repo);
+int is_file_ignored(const git_repo *repo, const char *abs_path) {
+    char imm_parent[PATH_MAX];
+    fs_path_dirname(abs_path, imm_parent);
+    return check_ignores(imm_parent, abs_path, repo);
 }
 
-void filter_ignores(pathspec_result *result, const git_repo *repo) {
-    int orig_size = result->size;
-    for (int i = 0; i < orig_size; i++) {
-        if (!is_file_ignored(repo, result->norm_paths[i])) {
-            add_pathspec_result(result, result->norm_paths[i]);
-        } else {
-            free(result->norm_paths[i]);
+char *normalize_path(char *norm_path, const git_repo *repo, const char *filepath, int already_relative) {
+    int size = strlen(filepath);
+    if (already_relative) {
+        snprintf(norm_path, PATH_MAX, "%s", filepath);
+    } else {
+        repo_rel_path(repo, filepath, norm_path);
+    }
+
+    for (int i = 0; i < size; i++) {
+        if (norm_path[i] == '\\') {
+            norm_path[i] = '/';
         }
     }
 
-    int new_size = result->size - orig_size;
-    memmove(result->norm_paths, result->norm_paths + orig_size, sizeof(char *) * new_size);
-    result->size = new_size;
+    return norm_path;
+}
+
+pathspec_result *init_pathspec_result() {
+    pathspec_result *result = smalloc(sizeof(*result));
+    result->size = 0;
+    result->capacity = 8;
+    result->args = smalloc(result->capacity * sizeof(git_file_arg *));
+    return result;
+}
+
+void free_pathspec_result(pathspec_result *result) {
+    for (int i = 0; i < result->size; i++) {
+        free(result->args[i]);
+    }
+    free(result->args);
+    free(result);
+}
+
+void add_pathspec_result(pathspec_result *result, git_file_arg *arg) {
+    if (result->size >= result->capacity) {
+        result->capacity *= 2;
+        result->args = srealloc(result->args, result->capacity * sizeof(char *));
+    } 
+    result->args[result->size++] = arg; 
+}
+
+void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) {
+    char abs_path[PATH_MAX];
+    git_file_arg *file_arg = smalloc(sizeof(*file_arg));
+
+    if (fs_file_exists(arg)) {
+        if (fs_path_abs(arg, abs_path) == 0) {
+            path_clean_seps(abs_path);
+
+            if (!is_path_in_folder(repo->root_path, abs_path)) {
+                fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
+            }
+            if (is_path_in_folder(repo->git_path, abs_path)) {
+                fatal("'%s' is inside repo's internal git folder", abs_path);
+            }
+
+            file_arg->exists = 1;
+            file_arg->ignored = is_file_ignored(repo, abs_path);
+            snprintf(file_arg->abs_path, PATH_MAX, "%s", abs_path);
+            normalize_path(file_arg->name, repo, abs_path, 0);
+            add_pathspec_result(result, file_arg);
+            return;
+        }
+
+        if (strlen(arg) + 1 > PATH_MAX) {
+            fatal("path '%s' is too long (> %d)", arg, PATH_MAX);
+        } 
+        fatal("unable to get absolute path of '%s'", arg);
+    } 
+
+    // TODO: accept glob patterns 
+    // - can expand into multiple paths
+    // fatal("unable to parse '%s' as path", arg);
+
+    // last resort assume arg is path relative to root
+    char name[PATH_MAX];
+    normalize_path(name, repo, arg, 1);
+    fs_path_join(repo->root_path, name, abs_path);
+    snprintf(file_arg->name, PATH_MAX, "%s", name);
+    snprintf(file_arg->abs_path, PATH_MAX, "%s", abs_path);
+    file_arg->exists = 0;
+    file_arg->ignored = 0;
 }
 
 void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder, int tracked_only, strarr_t *ignore_arr) {
@@ -184,7 +176,8 @@ void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder
             continue;
         }
 
-        char *norm_path = normalize_path(repo, ent.de_path, 0);
+        char norm_path[PATH_MAX];
+        normalize_path(norm_path, repo, ent.de_path, 0);
         int ignore = 0;
         if (tracked_only) {
             for (size_t i = 0; i < ignore_arr->len + ignore_arr_cur->len; i++) {
@@ -208,7 +201,6 @@ void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder
             char *subfolder = sstrdup(ent.de_path);
             folder_add_files(result, repo, subfolder, tracked_only, ignore_arr_cur);
             free(subfolder);
-            free(norm_path);
         }
     }
 

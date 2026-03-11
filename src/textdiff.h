@@ -30,6 +30,6 @@ git_textfile *textfile_from_file(fileinfo *finfo);
 git_textfile *textfile_from_blob(git_obj *blob);
 void textfile_free(git_textfile *text);
 
-void textdiff_myers_print(git_textfile *a, const char *a_name, git_textfile *b, const char *b_name);
+void textdiff_myers_print(git_textfile *new, const char *new_name, git_textfile *old, const char *old_name);
 
 #endif

@@ -25,6 +25,7 @@ int              del_ref(const git_repo *repo, enum ref_type type, const char *n
 git_ref        *read_ref(const git_repo *repo, enum ref_type type, const char *name, int fail_if_empty);
 void           write_ref(const git_repo *repo, enum ref_type type, const char *ref_name, const obj_hash *commit);
 strarr_t *refs_all_names(const git_repo *repo, enum ref_type type);
+int           ref_exists(const git_repo *repo, enum ref_type, const char *name);
 
 int is_valid_branch_name(const char *branch_name);
 

@@ -51,6 +51,4 @@ void diff_repo_index_tracked(git_diff *out, const git_repo *repo, const git_dirc
 // checks for new files (files in working tree but not in index).
 // repo is NEW and dircache is OLD
 void diff_repo_index_untracked(git_diff *out, const strarr_t *repo_files, const git_dircache *dircache);
-
-// TODO: diff repo and a tree
 #endif

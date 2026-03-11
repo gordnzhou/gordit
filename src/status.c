@@ -8,6 +8,7 @@
 #include "pathspec.h"
 #include "logging.h"
 #include "diff.h"
+#include "colour.h"
 
 void print_repo_status(const git_repo *repo) {
     git_dircache *dircache = create_dircache(repo);
@@ -108,12 +109,11 @@ void print_commit_tree(const git_repo *repo) {
     }
 
     // TODO: print commits reachable by HEAD
-    // - better print_commit
     // - handle commits multiple 2+ parents, 
     // - option to filter log by branch
 
     git_obj_commit *commit = read_commit_from_disk(repo, head_ref->hash);
-    printf("COMMIT %s\n", head_ref->hash);
+    colour_print(COLOUR_GREEN, "commit %s\n", head_ref->hash);
     while (1) {
         print_commit(commit);
         printf("\n");
@@ -123,7 +123,7 @@ void print_commit_tree(const git_repo *repo) {
         }
 
         git_obj_commit *parent_commit = read_commit_from_disk(repo, commit->parents[0]);
-        printf("COMMIT %s\n", commit->parents[0]);
+        colour_print(COLOUR_GREEN, "commit %s\n", commit->parents[0]);
         free_commit(commit);
         commit = parent_commit;
     }

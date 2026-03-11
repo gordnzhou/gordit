@@ -48,6 +48,13 @@ void write_ref(const git_repo *repo, enum ref_type type, const char *ref_name, c
     free(path);
 }
 
+int ref_exists(const git_repo *repo, enum ref_type type, const char *name) {
+    char *path = ref_full_path(repo, type, name);
+    int exists = fs_file_exists(path);
+    free(path);
+    return exists;
+}
+
 int del_ref(const git_repo *repo, enum ref_type type, const char *name) {
     char *path = ref_full_path(repo, type, name);
     if (!fs_file_exists(path)) {

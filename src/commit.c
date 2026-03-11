@@ -137,12 +137,10 @@ git_obj *create_commit_obj(const git_obj_commit *commit) {
     return obj;
 }
 
-void print_commit(const git_obj_commit *commit) {
-    int size;
-    char *buf = serialize_commit(&size, commit);
-    fwrite(buf, 1, size, stdout);
-    printf("\n");
-    free(buf);
+void print_commit(const git_obj_commit *commit) { 
+    printf("Author: %s <%s>\n", commit->author_name, commit->author_email);
+    printf("Date:   %s\n", ctime(&(commit->timestamp)));
+    printf("    %s\n", commit->msg);
 }
 
 git_obj_commit *read_commit_from_disk(const git_repo *repo, const obj_hash hash) { 

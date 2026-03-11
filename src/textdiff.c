@@ -3,6 +3,7 @@
 #include "textdiff.h"
 #include "utils.h"
 #include "logging.h"
+#include "colour.h"
 
 void textfile_free(git_textfile *text) {
     for (int i = 0; i < text->lcount; i++) {
@@ -18,25 +19,28 @@ void textdiff_free(git_textdiff *diff) {
 }
 
 void split_text(git_textfile *text, char *file, size_t file_len) {
-    strarr_t *lines = strarr_new();
-    char *buf = smalloc(file_len + 1);
-    memcpy(buf, file, file_len);
-    buf[file_len] = '\0';
-    
-    char *token = strtok(buf, "\n");
-    while (token != NULL) {
-        strarr_push(lines, token);
-        token = strtok(NULL, "\n");
+    text->lcount = file_len > 0;
+    for (size_t i = 0; i < file_len; i++) {
+        text->lcount += file[i] == '\n';
     }
 
-    text->lcount = lines->len;
     text->lines = smalloc(text->lcount*sizeof(char *));
-    for (int i = 0; i < text->lcount; i++) {
-        text->lines[i] = sstrdup(lines->data[i]);
-    }
 
-    strarr_free(lines);
-    free(buf);
+    char *line = file;
+    size_t line_count = 0;
+    for (size_t i = 0; i < file_len; i++) {
+        if (file[i] != '\n' && i != file_len - 1) {
+            continue;
+        }
+        size_t len = file + i - line + (file[i] == '\n');
+
+        text->lines[line_count] = smalloc(len + 1);
+        memcpy(text->lines[line_count], line, len);
+        text->lines[line_count][len] = '\0';
+
+        line_count++;
+        line = file + i + 1;
+    }
 }
 
 git_textfile *textfile_from_file(fileinfo *finfo) {
@@ -116,10 +120,10 @@ forward_done:;
         }
 
         if ((k == -d) || (k != d && row_prev[k + 1 + max] >= row_prev[k - 1 + max])) {
-            diff->diff_lines[diff->count++] = (git_linediff){ .text = old, .line = ys-1, .op = INSERT, .show = 0 };
+            diff->diff_lines[diff->count++] = (git_linediff){ .text = old, .line = ys-1, .op = DELETE, .show = 0 };
             x = xs, y = ys - 1;
         } else {
-            diff->diff_lines[diff->count++] = (git_linediff){ .text = new, .line = xs-1, .op = DELETE, .show = 0 };
+            diff->diff_lines[diff->count++] = (git_linediff){ .text = new, .line = xs-1, .op = INSERT, .show = 0 };
             x = xs - 1, y = ys;
         }
     }
@@ -131,8 +135,8 @@ forward_done:;
     return diff;
 }
 
-void textdiff_myers_print(git_textfile *a, const char *a_name, git_textfile *b, const char *b_name) {
-    git_textdiff *diff = text_diff_myers(a, b);
+void textdiff_myers_print(git_textfile *new, const char *new_name, git_textfile *old, const char *old_name) {
+    git_textdiff *diff = text_diff_myers(new, old);
 
     for (int i = 0; i < diff->count; i++) {
         if (diff->diff_lines[i].op == KEEP) {
@@ -148,7 +152,7 @@ void textdiff_myers_print(git_textfile *a, const char *a_name, git_textfile *b, 
         }
     }
 
-    printf("--- old/%s\n+++ new/%s\n\n", a_name, b_name);
+    colour_print(COLOUR_BOLD, "--- old/%s\n+++ new/%s\n\n", old_name, new_name);
     for (int i = diff->count - 1; i >= 0; i--) {
         git_linediff *linediff = diff->diff_lines + i;
         if (!linediff->show) {
@@ -156,8 +160,9 @@ void textdiff_myers_print(git_textfile *a, const char *a_name, git_textfile *b, 
         }
 
         char op = linediff->op == KEEP ? ' ' : linediff->op == INSERT ? '+' : '-';
+        const char *colour = linediff->op == KEEP ? NULL : linediff->op == INSERT ? COLOUR_GREEN : COLOUR_RED;
         const char *line = linediff->text->lines[linediff->line];
-        printf("%c %s\n", op, line); 
+        colour_print(colour, "%c %s", op, line); 
 
         if (i > 0 && (diff->diff_lines[i - 1].show == 0)) {
             printf("\n\n");

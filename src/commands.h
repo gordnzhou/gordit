@@ -2,33 +2,30 @@
 #define COMMANDS_H
 
 #include "args.h"
+#include "dircache.h"
+#include "pathspec.h"
+#include "refs.h"
 
-#define COMMANDS_LIST(X)      \
-    X(init, run_init)         \
-    X(add, run_add)           \
-    X(rm, run_rm)             \
-    X(commit, run_commit)     \
-    X(status, run_status)     \
-    X(log, run_log)           \
-    X(branch, run_branch)     \
-    X(diff, run_diff)         \
-    X(checkout, run_checkout) 
+int cmd_commit_index(const git_repo *repo, git_dircache *dircache, 
+    const char *author_name, 
+    const char *author_email, 
+    const char *msg
+);
 
-#define CMD_PROTOTYPE(name, func) int func(const arg_list *);
-    COMMANDS_LIST(CMD_PROTOTYPE)
+int cmd_add(const git_repo *repo, git_dircache *dircache, const pathspec_result *result);
 
-int run_no_command(const arg_list *);
+int cmd_rm(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const pathspec_result *result);
 
-typedef struct {
-    const char *name;
-    int (*handler)(const arg_list *);
-} command_entry;
+int cmd_diff_repo_index(const git_repo *repo, git_dircache *dircache);
 
-#define TABLE_ENTRY(name, func) { #name, func },
-command_entry cmd_func_table[] = {
-    COMMANDS_LIST(TABLE_ENTRY)
-};
+int cmd_restore_files(const git_repo *repo, const git_obj_tree *target_tree, const pathspec_result *result);
 
-#define COMMANDS_SIZE ((size_t)(sizeof(cmd_func_table) / sizeof(cmd_func_table[0])))
+int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, git_ref *target_ref);
+
+int cmd_branch_new(const git_repo *repo, git_ref *head_ref, const char *branch_name);
+
+int cmd_branch_delete(const git_repo *repo, const git_ref *head_ref, const char *branch_name);
+
+int cmd_branch_list(const git_repo *repo, const git_ref *head_ref);
 
 #endif

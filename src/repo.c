@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "filesystem.h"
 #include "objects.h"
@@ -9,6 +10,8 @@
 #include "utils.h"
 #include "logging.h"
 #include "refs.h"
+#include "dircache.h"
+#include "commit.h"
 
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int stat_mode_to_git(unsigned int st_mode) {
@@ -24,7 +27,6 @@ unsigned int stat_mode_to_git(unsigned int st_mode) {
 unsigned int git_mode_to_stat(unsigned int git_mode) {
     return git_mode & 0x1FF;
 }
-
 
 // Walks up `path` until it finds a directory with git folder. Fills `repo_root` with that directory path. 
 // @returns 1 on successful find and 0 if unsuccessful.
@@ -53,10 +55,10 @@ void init_repo_context(git_repo *repo, const char *repo_root) {
 #undef X
 }
 
-const git_repo *repo_init_context() {
+const git_repo *git_repo_init() {
     char cwd[PATH_MAX];
     sgetcwd(cwd, PATH_MAX);
-    path_clean_seps(cwd);
+    git_path_clean(cwd);
 
     char repo_root[PATH_MAX];
     if (!git_find_root(cwd, repo_root)) {
@@ -69,7 +71,7 @@ const git_repo *repo_init_context() {
 }
 
 int create_repo_folder(char *repo_root) {
-    path_clean_seps(repo_root);
+    git_path_clean(repo_root);
     git_repo *repo = smalloc(sizeof *repo);
     init_repo_context(repo, repo_root);
 
@@ -127,10 +129,18 @@ int obj_store_path(const git_repo *repo, const obj_hash hash, char *out) {
 
 void repo_rel_path(const git_repo *repo, const char *abs_path, char *out) {
     int root_len = strlen(repo->root_path);
-    int path_len = strlen(abs_path);
-    int rel_len = path_len - root_len;
 
-    assert(rel_len > 0 && memcmp(repo->root_path, abs_path, root_len) == 0);
+    int bad = 0;
+    for (int i = 0; i < root_len; i++) {
+        if (repo->root_path[i] == '/' || repo->root_path[i] == '\\') {
+            bad = abs_path[i] != '/' && abs_path[i] != '\\';
+        } else {
+            bad = tolower(abs_path[i]) != tolower(repo->root_path[i]);
+        }
+    }
+    if (bad) {
+        fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
+    }
 
     snprintf(out, PATH_MAX, "%s", abs_path + root_len + 1);
      
@@ -152,5 +162,16 @@ void repo_full_path(const git_repo *repo, const char *norm_path, char *out) {
             *ptr = '/';
         }
         ptr++;
+    }
+}
+
+void git_path_clean(char *path) {
+    int len = strlen(path);
+    for (int i = 0; i < PATH_MAX && i < len; i++) {
+        if (path[i] == '\\') {
+            path[i] = '/';
+        } else {
+            path[i] = tolower(path[i]);
+        }
     }
 }

@@ -135,14 +135,6 @@ void fs_path_join(const char *path1, const char *path2, char *out) {
     snprintf(out, PATH_MAX, "%s%s%s", path1, sep, p2);
 }
 
-void fs_clean_path(char *path) {
-    for (int i = 0; i < PATH_MAX && path[i] != '\0'; i++) {
-        if (path[i] == '/' || path[i] == '\\') {
-            path[i] = PATH_SEP;
-        }
-    }
-}
-
 #ifdef _WIN32
 
 int fs_path_abs(const char *path, char *out) {    

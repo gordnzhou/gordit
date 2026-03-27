@@ -1,7 +1,7 @@
 #ifndef REPO_H
 #define REPO_H
 
-#include <filesystem.h>
+#include "filesystem.h"
 #include "hash.h"
 
 #define GIT_MODE_DIR 0040000
@@ -62,7 +62,7 @@ unsigned int stat_mode_to_git(unsigned int st_mode);
 unsigned int git_mode_to_stat(unsigned int git_mode);
  
 // gets repo of current working directory
-const git_repo *repo_init_context();
+const git_repo *git_repo_init();
 
 // Initialize git folder in root, including subfolders, index and HEAD.
 // @returns 0 on success, 1 if git folder already in root, -1 otherwise. 
@@ -77,4 +77,8 @@ int obj_store_path(const git_repo *, const obj_hash, char *out);
 void repo_rel_path(const git_repo *, const char *, char *out);
 
 void repo_full_path(const git_repo *, const char *, char *out);
+
+// cleans slashes
+void git_path_clean(char *path);
+
 #endif

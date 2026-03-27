@@ -70,7 +70,7 @@ int cmp_tree_entries(const void *p1, const void *p2) {
 }
 
 // 6 (mode) + 4 (type) + 40 (hash) + PATH_MAX (name) + 4 (seperators)
-#define MAX_TREE_ENTRY_LINE 54 + PATH_MAX
+#define MAX_TREE_ENTRY_LINE (54 + PATH_MAX)
 
 void hash_tree_full(git_obj_tree *tree) {
     unsigned char *buf = smalloc(tree->size * MAX_TREE_ENTRY_LINE);

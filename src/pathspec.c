@@ -1,217 +1,411 @@
 #include <string.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "pathspec.h"
 #include "filesystem.h"
 #include "logging.h"
+#include "dircache.h"
+#include "tree.h"
 #include "utils.h"
 
-char *clean_str(const char *str) {
-    int len = strlen(str);
-    char *out = smalloc(len + 1);
-    int j = 0;
-    for (int i = 0; i < len; i++) {
-        if (str[i] != ' ' && str[i] != '\0' && str[i] != '\n') {
-            out[j++] = str[i];
-        }
-    }
-    out[j] = '\0';
-    return out;
-}
+#define MAX_PATHSPEC_PARTS 100
 
-// TODO: expand spec syntax beyond just filename
-// regex: ".", "*.txt", "src/*.html", 
-// path base: "src/"
-int path_matches_pathspec(const char *filepath, const char *spec) {
-    assert(strlen(spec) < PATH_MAX);
-
-    char *spec_clean = clean_str(spec);
-    char *filepath_clean = clean_str(filepath);
-    int res = strstr(filepath_clean, spec_clean) != NULL;
-
-    free(spec_clean);
-    free(filepath_clean);
-    return res;
-}
-
-int check_ignores(const char *folder, const char *fullpath, const git_repo *repo) {
-    char ignore_path[PATH_MAX];
-    fs_path_join(folder, GIT_IGNORE_NAME, ignore_path);
-    if (fs_file_exists(ignore_path)) {
-        FILE *fptr = sfopen(ignore_path, "r");
-        char line[PATH_MAX];
-        while (fgets(line, PATH_MAX, fptr) != NULL) {
-            if (path_matches_pathspec(fullpath, line)) {
-                fclose(fptr);
-                return 1;
-            }
-        }
-        fclose(fptr);
-    }
-
-    if (strcmp(repo->root_path, folder) == 0) {
-        return 0;
-    }
-
-    char parent[PATH_MAX];
-    fs_path_dirname(folder, parent);
-    return check_ignores(parent, fullpath, repo);
-}
-
-int is_file_ignored(const git_repo *repo, const char *abs_path) {
-    char imm_parent[PATH_MAX];
-    fs_path_dirname(abs_path, imm_parent);
-    return check_ignores(imm_parent, abs_path, repo);
-}
-
-char *normalize_path(char *norm_path, const git_repo *repo, const char *filepath, int already_relative) {
-    int size = strlen(filepath);
-    if (already_relative) {
-        snprintf(norm_path, PATH_MAX, "%s", filepath);
-    } else {
-        repo_rel_path(repo, filepath, norm_path);
-    }
-
-    for (int i = 0; i < size; i++) {
-        if (norm_path[i] == '\\') {
-            norm_path[i] = '/';
-        }
-    }
-
-    return norm_path;
-}
-
-pathspec_result *init_pathspec_result() {
-    pathspec_result *result = smalloc(sizeof(*result));
-    result->size = 0;
-    result->capacity = 8;
-    result->args = smalloc(result->capacity * sizeof(git_file_arg *));
-    return result;
-}
-
-void free_pathspec_result(pathspec_result *result) {
-    for (int i = 0; i < result->size; i++) {
-        free(result->args[i]);
-    }
-    free(result->args);
-    free(result);
-}
-
-void add_pathspec_result(pathspec_result *result, git_file_arg *arg) {
-    if (result->size >= result->capacity) {
-        result->capacity *= 2;
-        result->args = srealloc(result->args, result->capacity * sizeof(char *));
+char *path_git_name(const git_repo *repo, const char *path) {
+    if (strlen(path) + 1 > PATH_MAX) {
+        fatal("path '%s' is too long (> %d)", path, PATH_MAX);
     } 
-    result->args[result->size++] = arg; 
+
+    static char abs_path[PATH_MAX];
+    if (fs_path_abs(path, abs_path)) {
+        fatal("unable to get absolute path of '%s'", path);
+    }
+
+    git_path_clean(abs_path);
+
+    if (!is_path_in_folder(repo->root_path, abs_path)) {
+        fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
+    }
+    if (is_path_in_folder(repo->git_path, abs_path)) {
+        fatal("'%s' is inside repo's internal git folder", abs_path);
+    }
+
+    int root_len = strlen(repo->root_path);
+    int path_len = strlen(abs_path);
+    if (root_len == path_len) {
+        return sstrdup("");
+    }
+    
+    return sstrdup(abs_path + root_len + 1);
 }
 
-void expand_arg(pathspec_result *result, const git_repo *repo, const char *arg) {
-    char abs_path[PATH_MAX];
-    git_file_arg *file_arg = smalloc(sizeof(*file_arg));
+pathspec_item *pathspec_parse(const git_repo *repo, const char *relative_dir, const char *arg) {
+    pathspec_item *ps = smalloc(sizeof(*ps));
+    ps->orig = arg;
 
-    if (fs_file_exists(arg)) {
-        if (fs_path_abs(arg, abs_path) == 0) {
-            path_clean_seps(abs_path);
+    char arg_path[PATH_MAX];
+    char *cwd = relative_dir ? NULL : sgetcwd(NULL, PATH_MAX);
+    fs_path_join(relative_dir ? relative_dir : cwd, arg, arg_path);
 
-            if (!is_path_in_folder(repo->root_path, abs_path)) {
-                fatal("'%s' is outside of current repository (%s)", abs_path, repo->root_path);
+    static struct stat st;
+    if (stat(arg, &st) == 0) {
+        ps->fullname = path_git_name(repo, arg_path);
+    } else {
+        ps->fullname = smalloc(PATH_MAX);
+        repo_rel_path(repo, arg_path, ps->fullname);
+    }
+    git_path_clean(ps->fullname);
+    if (!cwd) free(cwd);
+
+    ps->parts = smalloc(MAX_PATHSPEC_PARTS*sizeof(pathspec_slice));
+    ps->nparts = 0;
+
+    char *fullname_copy = sstrdup(ps->fullname);
+    char *token = strtok(fullname_copy, "/\\");
+    while (token != NULL) {
+        if (ps->nparts == MAX_PATHSPEC_PARTS) {
+            fatal("pathspec '%s' has too many parts", arg);
+        }
+        pathspec_slice slice = { 0 };
+        slice.str = ps->fullname + (token - fullname_copy);
+        slice.len = strlen(token);
+        slice.type = STR;
+        if (strcmp(WILDCARD_RECUR_TOKEN, token) == 0) {
+            slice.type = WILD_RECUR;
+        } else if (strpbrk(token, "?*[]")) {
+            slice.type = GLOB_PATT;
+        }
+
+        ps->parts[ps->nparts++] = slice;
+        token = strtok(NULL, "/\\");
+    }
+
+    return ps;
+}
+
+void pathspec_free(pathspec_item *pathspec) {
+    free(pathspec->parts);
+    free(pathspec->fullname);
+    free(pathspec);
+}
+
+git_file_list *git_fl_init() {
+    git_file_list *list = smalloc(sizeof(*list));
+    list->size = 0;
+    list->capacity = 16;
+    list->items = smalloc(list->capacity*sizeof(git_file_item *));
+    return list;
+}
+
+void git_fl_add(git_file_list *list, const char *name) {
+    list->changed = 1; 
+
+    // TODO: could convert to hash map
+    for (int i = 0; i < list->size; i++) {
+        if (strcmp(name, list->items[i]->name) == 0) {
+           return;
+        }
+    }
+
+    git_file_item *item = smalloc(sizeof(*item));
+    snprintf(item->name, PATH_MAX, "%s", name);
+    if (list->size == list->capacity) {
+        list->capacity *= 2;
+        list->items = realloc(list->items, list->capacity*sizeof(git_file_item *));
+    }
+    list->items[list->size++] = item;
+}
+
+void git_fl_free(git_file_list *list) {
+    for (int i = 0; i < list->size; i++) {
+        free(list->items[i]);
+    }
+    free(list->items);
+    free(list);
+}
+
+int pathspec_slice_matches(const pathspec_slice *part, const char *name) {
+    if (part->type == WILD_RECUR) {
+        return 1;
+    }
+    if (part->type == STR) {
+        size_t namelen = strlen(name);
+        return namelen == part->len && memcmp(part->str, name, part->len) == 0;
+    }
+    if (part->type == GLOB_PATT) {
+        const char *pend = part->str + part->len;
+        const char *p = part->str, *s = name;
+        const char *star_p = NULL, *star_s = NULL;
+
+        while (*s) {
+            if (p < pend && (*p == '?' || *p == *s)) {
+                p++; s++;
+            } else if (p < pend && *p == '*') {
+                star_p = p++;
+                star_s = s;
+            } else if (p < pend && *p == '[') {
+                ++p;
+                int negate = (p < pend && *p == '!'), matched = 0;
+                if (negate) {
+                    ++p;
+                }
+
+                while (p < pend && *p != ']') {
+                    if ((p+1) < pend && *(p+1) == '-' && 
+                        (p+2) < pend && *(p+2) != ']') {
+                        if (*s >= *p && *s <= *(p+2)) matched = 1;
+                        p += 3;
+                    } else {
+                        if (*s == *p) matched = 1;
+                        p++;
+                    }
+                }
+                if (p < pend && *p == ']') p++;
+
+                if (matched == negate) {
+                    if (!star_p) return 0;
+                    p = star_p + 1;
+                    s = ++star_s;
+                } else {
+                    s++;
+                }
+            } else if (star_p) {
+                p = star_p + 1;
+                s = ++star_s;
+            } else {
+                return 0;
             }
-            if (is_path_in_folder(repo->git_path, abs_path)) {
-                fatal("'%s' is inside repo's internal git folder", abs_path);
-            }
+        }
 
-            file_arg->exists = 1;
-            file_arg->ignored = is_file_ignored(repo, abs_path);
-            snprintf(file_arg->abs_path, PATH_MAX, "%s", abs_path);
-            normalize_path(file_arg->name, repo, abs_path, 0);
-            add_pathspec_result(result, file_arg);
+        while (p < pend && *p == '*') p++;
+        return p == pend;
+    }
+
+    fatal("unimplemented");
+}
+
+int pathspec_full_matches(const pathspec_item *pathspec, const char *name) {
+    char *name_copy = sstrdup(name);
+    const char *name_part = strtok(name_copy, "/");
+    int match_part = 0;
+    int wild_recurse = 0;
+
+    while (name_part != NULL && match_part < pathspec->nparts) {
+        pathspec_slice *part = pathspec->parts + match_part;
+        if (part->type == WILD_RECUR) {
+            wild_recurse = 1;
+            match_part++;
+        } else if (wild_recurse) {
+            if (pathspec_slice_matches(part, name_part)) {
+                match_part++;
+                wild_recurse = 0;
+            }
+            name_part = strtok(NULL, "/");
+        } else {
+            if (!pathspec_slice_matches(part, name_part)) {
+                return 0;
+            }
+            match_part++;
+            name_part = strtok(NULL, "/");
+        }
+    }
+
+    return match_part == pathspec->nparts;
+}
+
+int is_ignored(const git_repo *repo, const char *name) {
+    static char folder[PATH_MAX], filepath[PATH_MAX], buf[PATH_MAX];
+    fs_path_join(repo->root_path, name, folder);
+    int len = strlen(folder);
+
+    for (int i = strlen(repo->root_path); i < len; i++) {
+        if (folder[i] != '/') { continue; }
+
+        folder[i] = '\0';
+        fs_path_join(folder, GIT_IGNORE_NAME, filepath);
+        FILE *file = fopen(filepath, "r");
+        if (file) {
+            while (sfgets(buf, PATH_MAX, file, filepath, 0)) {
+                buf[strcspn(buf, "\n")] = '\0';
+                pathspec_item *ps = pathspec_parse(repo, folder, buf);
+                if (ps == NULL) {
+                    continue;
+                }
+                if (pathspec_full_matches(ps, name)) {
+                    fclose(file);
+                    return 1;
+                }
+                pathspec_free(ps);
+            }
+            fclose(file);
+        }
+        folder[i] = '/';
+    }
+
+    return 0;
+}
+
+void git_fl_add_wt(const git_repo *repo, git_file_list *list, const char *path, int tracked_only) {
+    char *name = path_git_name(repo, path);  
+    if (tracked_only && is_ignored(repo, name)) {
+        free(name);
+        return;
+    }
+
+    git_fl_add(list, name);
+    free(name);
+}
+
+void working_tree_walk(git_file_list *out, const git_repo *repo, const char *folder,  
+    const pathspec_item *pathspec, int cur_depth, int wild_recurse,
+    int tracked_only
+) { 
+    int found = cur_depth == pathspec->nparts;
+
+    if (!found && !wild_recurse) {
+        pathspec_slice *part = pathspec->parts + cur_depth;
+        if (part->type == WILD_RECUR) {
+            wild_recurse = 1;
+            while (cur_depth < pathspec->nparts && pathspec->parts[cur_depth].type == WILD_RECUR) {
+                cur_depth++;
+            }
+            found = cur_depth == pathspec->nparts;
+        } else if (part->type == STR) {
+            char target[PATH_MAX];
+            fs_path_join(folder, part->str, target);
+            target[strlen(target) - (strlen(part->str) - part->len)] = '\0';
+            struct stat st;
+            if (stat(target, &st)) {
+                return;
+            }
+            if (S_ISREG(st.st_mode)) {
+                if (cur_depth == pathspec->nparts - 1) {
+                    git_fl_add_wt(repo, out, target, tracked_only);
+                }
+            } else if (S_ISDIR(st.st_mode)) {
+                working_tree_walk(out, repo, target, pathspec, cur_depth + 1, 0, tracked_only);
+            }
             return;
         }
-
-        if (strlen(arg) + 1 > PATH_MAX) {
-            fatal("path '%s' is too long (> %d)", arg, PATH_MAX);
-        } 
-        fatal("unable to get absolute path of '%s'", arg);
-    } 
-
-    // TODO: accept glob patterns 
-    // - can expand into multiple paths
-    // fatal("unable to parse '%s' as path", arg);
-
-    // last resort assume arg is path relative to root
-    char name[PATH_MAX];
-    normalize_path(name, repo, arg, 1);
-    fs_path_join(repo->root_path, name, abs_path);
-    snprintf(file_arg->name, PATH_MAX, "%s", name);
-    snprintf(file_arg->abs_path, PATH_MAX, "%s", abs_path);
-    file_arg->exists = 0;
-    file_arg->ignored = 0;
-}
-
-void folder_add_files(strarr_t *result, const git_repo *repo, const char *folder, int tracked_only, strarr_t *ignore_arr) {
-    DIR *dir = sopendir(folder);
-
-    strarr_t *ignore_arr_cur = strarr_new();
-    if (tracked_only) {
-        char ignore_list_path[PATH_MAX];
-        fs_path_join(folder, GIT_IGNORE_NAME, ignore_list_path);
-
-        if (fs_file_exists(ignore_list_path)) {
-            FILE *fptr = sfopen(ignore_list_path, "r");
-            char line[PATH_MAX];
-            while (fgets(line, PATH_MAX, fptr) != NULL) {
-                strarr_push(ignore_arr_cur, line);
-            }
-            fclose(fptr);
-        }
     }
 
+    DIR *dir = sopendir(folder);
     fs_dirent ent = { 0 };
     int ret = 0;
     while ((ret = fs_readdir(dir, &ent, folder)) != 0) {
         if (ret == -1) {
             continue;
         }
-
         if (strcmp(ent.de_name, ".git") == 0 || strcmp(ent.de_name, GIT_FOLDER) == 0) {
             continue;
         }
 
-        char norm_path[PATH_MAX];
-        normalize_path(norm_path, repo, ent.de_path, 0);
-        int ignore = 0;
-        if (tracked_only) {
-            for (size_t i = 0; i < ignore_arr->len + ignore_arr_cur->len; i++) {
-                const char *spec = (i < ignore_arr->len) ? 
-                    ignore_arr->data[i] : ignore_arr_cur->data[i - ignore_arr->len];
-
-                if (path_matches_pathspec(norm_path, spec)) {
-                    ignore = 1;
-                    break;
-                } 
+        char *subfolder = sstrdup(ent.de_path);
+        if (found) {
+            if (ent.de_type == FS_ISFILE) {
+                git_fl_add_wt(repo, out, ent.de_path, tracked_only);
+            } else if (ent.de_type == FS_ISDIR) {
+                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 0, tracked_only);
+            }
+            continue;
+        } else {
+            if (pathspec_slice_matches(pathspec->parts + cur_depth, ent.de_name)) {
+                if (ent.de_type == FS_ISFILE) {
+                    if (cur_depth == pathspec->nparts - 1) {
+                        git_fl_add_wt(repo, out, ent.de_path, tracked_only);
+                    }
+                } else if (ent.de_type == FS_ISDIR) {
+                    working_tree_walk(out, repo, subfolder, pathspec, cur_depth + 1, 0, tracked_only);
+                }
+            } else if (wild_recurse && ent.de_type == FS_ISDIR) {
+                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 1, tracked_only);
             }
         }
+       free(subfolder);
+    }
+    closedir(dir);
+}
 
-        if (ignore) {
-            continue;
-        }
+int git_fl_working_tree_files(git_file_list *out, const git_repo *repo, const pathspec_item *pathspec, int tracked_only) {
+    out->changed = 0;
+    working_tree_walk(out, repo, repo->root_path, pathspec, 0, 0, tracked_only);
+    return out->changed; 
+}
 
-        if (ent.de_type == FS_ISFILE) {
-            strarr_push(result, norm_path);
-        } else if (ent.de_type == FS_ISDIR) {
-            char *subfolder = sstrdup(ent.de_path);
-            folder_add_files(result, repo, subfolder, tracked_only, ignore_arr_cur);
-            free(subfolder);
+void tree_obj_walk(git_file_list *out, const git_obj_tree *tree,  
+    const pathspec_item *pathspec, 
+    const char *path, int cur_depth, int wild_recurse
+) {
+    int found = cur_depth == pathspec->nparts;
+
+    if (!found && !wild_recurse) {
+        pathspec_slice *part = pathspec->parts + cur_depth;
+        if (part->type == WILD_RECUR) {
+            wild_recurse = 1;
+            while (cur_depth < pathspec->nparts && pathspec->parts[cur_depth].type == WILD_RECUR) {
+                cur_depth++;
+            }
+            found = cur_depth == pathspec->nparts;
         }
     }
 
-    closedir(dir);
-    strarr_free(ignore_arr_cur);
+    for (int i = 0; i < tree->size; i++) {
+        git_tree_entry *entry = tree->entries[i];
+        char *subpath = smalloc(PATH_MAX);
+        snprintf(subpath, PATH_MAX, "%s%s%s", path, strcmp(path, "") == 0 ? "" : "/", entry->name);
+
+        if (found) {
+            if (entry->type == OBJ_TYPE_BLOB) {
+                git_fl_add(out, subpath);
+            } else if (entry->type == OBJ_TYPE_TREE) {
+                tree_obj_walk(out, entry->u.tree, pathspec, subpath, cur_depth, 0);
+            }
+            continue;
+        } else {
+            if (pathspec_slice_matches(pathspec->parts + cur_depth, entry->name)) {
+                if (entry->type == OBJ_TYPE_BLOB) {
+                    if (cur_depth == pathspec->nparts - 1) {
+                        git_fl_add(out, subpath);
+                    }
+                } else if (entry->type == OBJ_TYPE_TREE) {
+                    tree_obj_walk(out, entry->u.tree, pathspec, subpath, cur_depth + 1, 0);
+                }
+            } else if (wild_recurse && entry->type == OBJ_TYPE_TREE) {
+                tree_obj_walk(out, entry->u.tree, pathspec, subpath, cur_depth , 1);
+            }
+        }
+       free(subpath);
+    }
 }
 
+int git_fl_tree_obj_files(git_file_list *out, const git_obj_tree *tree, const pathspec_item *pathspec) {
+    out->changed = 0;
+    tree_obj_walk(out, tree, pathspec, "", 0, 0);
+    return out->changed;
+}
+
+int git_fl_dircache_files(git_file_list *out, const git_dircache *dircache, const pathspec_item *pathspec) {
+    out->changed = 0;
+    for (int i = 0; i < dircache->num_entries; i++) {
+        git_index_entry *entry = dircache->entries[i];
+        if (pathspec_full_matches(pathspec, entry->name)) {
+            git_fl_add(out, entry->name);
+        }
+    }
+    return out->changed;
+}
+
+
 strarr_t *repo_all_files(const git_repo *repo, int tracked_only) {
-    strarr_t *result = strarr_new();
-    strarr_t *ignore_arr = strarr_new();
-    folder_add_files(result, repo, repo->root_path, tracked_only, ignore_arr);
-    strarr_free(ignore_arr);
-    return result;
+    strarr_t *out = strarr_new();
+    git_file_list *files = git_fl_init();
+    pathspec_item *ps = pathspec_parse(repo, repo->root_path, ".");
+    git_fl_working_tree_files(files, repo, ps, tracked_only);
+    pathspec_free(ps);
+    for (int i = 0 ; i < files->size; i++) {
+        strarr_push(out, files->items[i]->name);
+    }
+    git_fl_free(files);
+    return out;
 }

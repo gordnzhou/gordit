@@ -83,13 +83,20 @@ void sfputs(const char *str, FILE *file, const char *name) {
     }
 }
 
-void sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize) {
-    if (fgets(buf, buf_len, file) == NULL) {
+char *sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize) {
+    char *ret = fgets(buf, buf_len, file);
+    if (!ret) {
+        if (feof(file)) {
+            return NULL;
+        }
         fatal("could not read string from '%s': %s", name, strerror(errno));
     }
+    
     if (strict_bufsize && strlen(buf) != buf_len - 1) {
         fatal("could not fully read string from '%s'", name);
     }
+
+    return ret;
 }
 
 void sremove(const char *filepath) {
@@ -147,13 +154,3 @@ void strarr_free(strarr_t *arr) {
     }
     free(arr);
 }
-
-void path_clean_seps(char *path) {
-    int len = strlen(path);
-    for (int i = 0; i < PATH_MAX && i < len; i++) {
-        if (path[i] == '\\') {
-            path[i] = '/';
-        }
-    }
-}
-

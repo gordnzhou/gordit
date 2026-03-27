@@ -45,8 +45,6 @@ void tree_blobs_flat(git_tree_entry **out_blob_list, size_t out_size, const git_
 
 git_tree_entry **tree_find_blob(const git_obj_tree *root, const char *name);
 
-git_tree_entry **tree_flat_find(const git_tree_entry **tree_flat, const char *name);
-
 // Inits tree struct representing `folderpath`. Recursively creates tree for subfolders and blobs for files.
 // @return pointer to tree or NULL if failure
 git_obj_tree *create_tree_from_path(const git_repo *, const char *folderpath);

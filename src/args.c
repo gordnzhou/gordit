@@ -77,7 +77,7 @@ void default_help_print(const char *program) {
 
 int command_main(int argc, char *const argv[]) {
     char *command = argc >= 2 ? argv[1] : "";
-    char *program = argv[0];
+    char *program = MY_NAME;
     int opt;
     int status = 0;
     int cmd_found = 0;
@@ -89,48 +89,75 @@ int command_main(int argc, char *const argv[]) {
     #define OPT_NUM_ASSIGN(name) arglist.name = atoi(optarg)
     #define OPT_STR_ASSIGN(name) arglist.name = optarg
 
+    #define CHAR_a 'a'
+    #define CHAR_b 'b'
+    #define CHAR_c 'c'
+    #define CHAR_d 'd'
+    #define CHAR_e 'e'
+    #define CHAR_f 'f'
+    #define CHAR_g 'g'
+    #define CHAR_h 'h'
+    #define CHAR_i 'i'
+    #define CHAR_j 'j'
+    #define CHAR_k 'k'
+    #define CHAR_l 'l'
+    #define CHAR_m 'm'
+    #define CHAR_n 'n'
+    #define CHAR_o 'o'
+    #define CHAR_p 'p'
+    #define CHAR_q 'q'
+    #define CHAR_r 'r'
+    #define CHAR_s 's'
+    #define CHAR_t 't'
+    #define CHAR_u 'u'
+    #define CHAR_v 'v'
+    #define CHAR_w 'w'
+    #define CHAR_x 'x'
+    #define CHAR_y 'y'
+    #define CHAR_z 'z'
+
     #define PATHSPEC_PARSE_0
     #define PATHSPEC_PARSE_1                         \
-        for (int i = optind-1; i < argc; i++) {      \
+        for (int i = optind; i < argc; i++) {        \
             if (arglist.ps_size >= 100) {            \
                 fatal("too many arguments");         \
             }                                        \
             arglist.ps_size++;                       \
-            arglist.pathspecs[i-optind+1] = argv[i]; \
+            arglist.pathspecs[i-optind] = argv[i]; \
         }
 
     #define Y(opt_type, char, name, desc, usage) \
-        case ((#char)[0]): opt_type##_ASSIGN(name); break;
+        case CHAR_##char: opt_type##_ASSIGN(name); break;
 
-    #define X(name, options, has_ps, desc)                      \
-    if (strcmp(#name, command) == 0) {                          \
-        assert(cmd_found == 0); cmd_found = 1;                  \
-        ARGLIST_STRUCT(name) arglist = { 0 };                   \
-        const char *optstring = cmd_optstring(#name);           \
-        while ((opt = getopt(argc, argv, optstring)) != -1) {   \
-            switch(opt) {                                       \
-                options                                         \
-                case ':':                                       \
-                    status = error("missing arg for '-%c'\n", optopt);      \
-                    show_help = 1;                              \
-                    break;                                      \
-                case '?':                                       \
-                    status = error("unknown option '-%c'.\n", optopt);   \
-                    show_help = 1;                              \
-                    break;                                      \
-                case 'h':                                       \
-                    show_help = 1;                              \
-                    break;                                      \
-                default:                                        \
-                    abort();                                    \
-            }                                                   \
-        }                                                       \
-        PATHSPEC_PARSE_ ##has_ps                                \
-        if (show_help) {                                        \
-            cmd_usage_print(program, command);                  \
-        } else {                                                \
-            run_ ##name (&arglist);                             \
-        }                                                       \
+    #define X(name, options, has_ps, desc)                                      \
+    if (strcmp(#name, command) == 0) {                                          \
+        assert(cmd_found == 0); cmd_found = 1;                                  \
+        ARGLIST_STRUCT(name) arglist = { 0 };                                   \
+        const char *optstring = cmd_optstring(#name);                           \
+        while ((opt = getopt(argc, argv, optstring)) != -1) {                   \
+            switch(opt) {                                                       \
+                options                                                         \
+                case ':':                                                       \
+                    status = error("option '-%c' requires a value\n", optopt);  \
+                    show_help = 1;                                              \
+                    break;                                                      \
+                case '?':                                                       \
+                    status = error("unknown option '-%c'.\n", optopt);          \
+                    show_help = 1;                                              \
+                    break;                                                      \
+                case 'h':                                                       \
+                    show_help = 1;                                              \
+                    break;                                                      \
+                default:                                                        \
+                    abort();                                                    \
+            }                                                                   \
+        }                                                                       \
+        PATHSPEC_PARSE_ ##has_ps                                                \
+        if (show_help) {                                                        \
+            cmd_usage_print(program, command);                                  \
+        } else {                                                                \
+            run_ ##name (&arglist);                                             \
+        }                                                                       \
     }
     GIT_ARGS
     #undef X 

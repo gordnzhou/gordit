@@ -53,8 +53,6 @@ DIR * fs_opendir(const char *);
 
 int fs_closedir(DIR *);
 
-void fs_clean_path(char *path);
-
 // Same as `stat()` function in POSIX 
 // @return 0 on success, otherwise -1
 int fs_getinfo(const char *path, struct fs_statinfo *statinfo);

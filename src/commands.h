@@ -12,13 +12,13 @@ int cmd_commit_index(const git_repo *repo, git_dircache *dircache,
     const char *msg
 );
 
-int cmd_add(const git_repo *repo, git_dircache *dircache, const pathspec_result *result);
+int cmd_add_file(const git_repo *repo, git_dircache *dircache, const char *git_path_name);
 
-int cmd_rm(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const pathspec_result *result);
+int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const char *git_path_name);
 
 int cmd_diff_repo_index(const git_repo *repo, git_dircache *dircache);
 
-int cmd_restore_files(const git_repo *repo, const git_obj_tree *target_tree, const pathspec_result *result);
+int cmd_restore_file(const git_repo *repo, const git_obj_tree *target_tree, const char *git_path_name);
 
 int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, git_ref *target_ref);
 

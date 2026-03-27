@@ -13,77 +13,56 @@
 #include "args.h"
 #include "textdiff.h"
 
-/*
-TODO:
-- pathspec handling function for all cmd_ funcs
-- context struct that holds repo, dircache, head_ref, head_tree, head_commit
-    - cleanup context function 
-*/
+int cmd_add_file(const git_repo *repo, git_dircache *dircache, const char *git_path_name) {
+    fileinfo *info = start_fileinfo(repo, git_path_name, "rb");
 
-
-int cmd_add(const git_repo *repo, git_dircache *dircache, const pathspec_result *result) {
-    for (int i = 0; i < result->size; i++) {
-        git_file_arg *file_arg = result->args[i];
-        if (file_arg->ignored || !file_arg->exists) {
-            continue;
-        }
-
-        fileinfo *info = start_fileinfo(repo, file_arg->name, "rb");
-        if (dircache_matching_entry(dircache, info)) {
-            DEBUG_PRINT("skipping add to '%s' to index", info->norm_path);
-            end_fileinfo(info);
-            continue;
-        }
-
-        git_obj *blob = create_blob_from_file(info);
-        if (!blob) {
-            fatal("could not add '%s': blob creation failed", info->norm_path);
-        }
-
-        dircache_add(dircache, info, blob);
-
-        write_obj_to_disk(repo, blob);
-        DEBUG_PRINT("wrote %s to disk for %s\n", blob->hash, info->norm_path);
-
-        free_obj(blob);
+    if (dircache_matching_entry(dircache, info)) {
+        DEBUG_PRINT("skipping add to '%s' to index", info->norm_path);
         end_fileinfo(info);
+        return 0;
     }
+
+    git_obj *blob = create_blob_from_file(info);
+    if (!blob) {
+        return error("could create blob from '%s'", info->norm_path);
+    }
+
+    dircache_add(dircache, info, blob);
+
+    write_obj_to_disk(repo, blob);
+    DEBUG_PRINT("wrote %s to disk for %s\n", blob->hash, info->norm_path);
+
+    free_obj(blob);
+    end_fileinfo(info);
 
     return 0;
 }
 
-int cmd_rm(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const pathspec_result *result) {
-    for (int i = 0; i < result->size; i++) {
-        git_file_arg *file_arg = result->args[i];
-        if (file_arg->ignored || !file_arg->exists) {
-            continue;
-        }
-
-        fileinfo *info = start_fileinfo(repo, file_arg->name, "rb");
-        git_index_entry **in_index = dircache_find_file(dircache, info->norm_path);
-        if (!in_index) {
-            end_fileinfo(info);
-            continue;
-        }
-
-        git_index_entry *entry = *in_index;
-        if (is_file_changed_unstaged(entry, info)) {
-            fatal("cannot remove '%s' as it has unstaged changes", file_arg->name);
-        }
-
-        if (head_tree != NULL) {
-            git_tree_entry **found = tree_find_blob(head_tree, file_arg->name);
-            if (found != NULL && strcmp(entry->hash, (*found)->u.blob_hash) != 0) {
-                fatal("cannot remove '%s' as it has uncommited changes", file_arg->name);
-            }
-        }
-
-        if (dircache_remove(dircache, info->norm_path) != 0) {
-            DEBUG_PRINT("removing '%s' from index but it is not in dircache", info->abs_path); 
-        }
-
-        sremove(info->abs_path);
+// TODO: option to remove only from index, "force" option to ignore checks
+int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const char *git_path_name) {
+    git_index_entry **in_index = dircache_find_file(dircache, git_path_name);
+    if (!in_index) {
+        return 0;
     }
+
+    fileinfo *info = start_fileinfo(repo, git_path_name, "rb");
+    git_index_entry *entry = *in_index;
+    if (is_file_changed_unstaged(entry, info)) {
+        fatal("cannot remove '%s' as it has unstaged changes", git_path_name);
+    }
+
+    if (head_tree != NULL) {
+        git_tree_entry **found = tree_find_blob(head_tree, git_path_name);
+        if (found != NULL && strcmp(entry->hash, (*found)->u.blob_hash) != 0) {
+            fatal("cannot remove '%s' as it has uncommited changes", git_path_name);
+        }
+    }
+
+    if (dircache_remove(dircache, info->norm_path) != 0) {
+        DEBUG_PRINT("removing '%s' from index but it is not in dircache", info->abs_path); 
+    }
+
+    sremove(info->abs_path);
 
     return 0;
 }
@@ -197,10 +176,10 @@ int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, g
 
             struct fileinfo *info = start_fileinfo(repo, entry->name, "rb");
             dircache_add(dircache, info, blob);
+            DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
+            
             free_obj(blob);
             end_fileinfo(info);
-
-            DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
         }
     }
 
@@ -215,28 +194,25 @@ int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, g
     return 0;
 }
 
-int cmd_restore_files(const git_repo *repo, const git_obj_tree *target_tree, const pathspec_result *result) {
-    char full_path[PATH_MAX];
-    for (int i = 0; i < result->size; i++) {
-        git_file_arg *file_arg = result->args[i];
-        git_tree_entry **in_other = tree_find_blob(target_tree, file_arg->name);
-        if (in_other == NULL) {
-            continue;
-        }
-
-        git_tree_entry *entry = *in_other;
-        assert(entry->type == OBJ_TYPE_BLOB);
-        
-        repo_full_path(repo, entry->name, full_path);
-        git_obj *blob = read_blob_from_disk(repo, entry->u.blob_hash);
-
-        if (create_file_from_blob(full_path, blob)) {
-            fatal("failed to restore '%s' to object %s", full_path, blob->hash);
-        }
-
-        DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
-        free_obj(blob);
+int cmd_restore_file(const git_repo *repo, const git_obj_tree *target_tree, const char *git_path_name) {
+    static char full_path[PATH_MAX];
+    git_tree_entry **in_other = tree_find_blob(target_tree, git_path_name);
+    if (in_other == NULL) {
+        return 0;
     }
+
+    git_tree_entry *entry = *in_other;
+    assert(entry->type == OBJ_TYPE_BLOB);
+    
+    repo_full_path(repo, entry->name, full_path);
+    git_obj *blob = read_blob_from_disk(repo, entry->u.blob_hash);
+
+    if (create_file_from_blob(full_path, blob)) {
+        fatal("failed to restore '%s' to object %s", full_path, blob->hash);
+    }
+
+    DEBUG_PRINT("restored '%s' to object %s", full_path, blob->hash);
+    free_obj(blob);
 
     return 0;
 }

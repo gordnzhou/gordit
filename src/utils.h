@@ -26,7 +26,8 @@ void sfputs(const char *str, FILE *file, const char *name);
 
 // @param name name of file for logging.
 // @param struct_bufsize if not exactly `buf_len` bytes were read and this is set, program will crash
-void sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize);
+// @return NULL if end of file is reached
+char *sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict_bufsize);
 
 void sremove(const char *filepath);
 
@@ -34,8 +35,6 @@ char *sstrdup(const char *src);
 char *sstrndup(const char *src, size_t size);
 
 int is_path_in_folder(const char *abs_folder_path, const char *abs_path);
-
-void path_clean_seps(char *path);
 
 // Quick way to get dynamic array at the cost of complexity from macros
 // and obscuring the type (int* is a array?)
@@ -99,5 +98,42 @@ typedef struct {
 strarr_t *strarr_new();
 void     strarr_push(strarr_t *arr, const char *str);
 void     strarr_free(strarr_t *arr);
+
+#define DEFINE_DARRAY(name, type)                                        \
+typedef struct {                                                         \
+    size_t len;                                                          \
+    size_t capacity;                                                     \
+    type *data;                                                          \
+} name##_t;                                                              \
+                                                                         \
+static inline name##_t *name##_new() {                                   \
+    name##_t *arr = smalloc(sizeof(*arr));                               \
+    arr->len = 0;                                                        \
+    arr->capacity = DA_CAP_INIT;                                         \
+    arr->data = smalloc(arr->capacity * sizeof(type));                   \
+    return arr;                                                          \
+}                                                                        \
+                                                                         \
+static inline name##_t *name##_copy(const name##_t *src) {               \
+    name##_t *dst = smalloc(sizeof(*dst));                               \
+    dst->len      = src->len;                                            \
+    dst->capacity = src->capacity;                                       \
+    dst->data     = smalloc(src->capacity * sizeof(type));               \
+    memcpy(dst->data, src->data, src->len * sizeof(type));               \
+    return dst;                                                          \
+}                                                                        \
+                                                                         \
+static inline void name##_push(name##_t *arr, type val) {                \
+    if (arr->len >= arr->capacity) {                                     \
+        arr->capacity *= DA_SCALE_FACTOR;                                \
+        arr->data = srealloc(arr->data, arr->capacity * sizeof(type));   \
+    }                                                                    \
+    arr->data[arr->len++] = val;                                         \
+}                                                                        \
+                                                                         \
+static inline void name##_free(name##_t *arr) {                          \
+    free(arr->data);                                                     \
+    free(arr);                                                           \
+}
 
 #endif

@@ -36,6 +36,9 @@ char *sstrndup(const char *src, size_t size);
 
 int is_path_in_folder(const char *abs_folder_path, const char *abs_path);
 
+// compares two strings ignoring cases 
+int strcicmp(const char *, const char *);
+
 // Quick way to get dynamic array at the cost of complexity from macros
 // and obscuring the type (int* is a array?)
 // USE FOR SIMPLE CASES WHERE DATA IS NOT BEING PASSED AROUND FUNCTIONS
@@ -77,7 +80,6 @@ typedef struct {
     DA_FREE(arr);                                \
 } while (0)
 
-// TODO: handle NULL case
 #define DA_COPY(dst, src) do {                                               \
     if (src != NULL) {                                                       \
     size_t _len = DA_LEN(src);                                               \
@@ -131,7 +133,11 @@ static inline void name##_push(name##_t *arr, type val) {                \
     arr->data[arr->len++] = val;                                         \
 }                                                                        \
                                                                          \
-static inline void name##_free(name##_t *arr) {                          \
+static inline void name##_free(name##_t *arr,                            \
+    void (*element_free_func)(type)) {                                   \
+    for (size_t i = 0; i < arr->len; i++) {                              \
+        element_free_func(arr->data[i]);                                 \
+    }                                                                    \
     free(arr->data);                                                     \
     free(arr);                                                           \
 }

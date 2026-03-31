@@ -47,8 +47,9 @@ options
 
 void git_fl_free(git_file_list *list);
 git_file_list *git_fl_init();
+int git_fl_find(const git_file_list *list, const char *name);
 
-int git_fl_working_tree_files(git_file_list *out, const git_repo *repo, const pathspec_item *pathspec, int tracked_only);
+int git_fl_working_tree_files(git_file_list *out, const git_repo *repo, const pathspec_item *pathspec, int check_ignores);
 int git_fl_dircache_files(git_file_list *out, const git_dircache *dircache, const pathspec_item *pathspec);
 int git_fl_tree_obj_files(git_file_list *out, const git_obj_tree *tree, const pathspec_item *pathspec);
 
@@ -59,6 +60,6 @@ pathspec_item *pathspec_parse(const git_repo *repo, const char *relative_dir, co
 
 int pathspec_full_matches(const pathspec_item *pathspec, const char *name);
 
-strarr_t *repo_all_files(const git_repo *repo, int tracked_only);
+strarr_t *working_tree_all_files(const git_repo *repo, int check_ignores);
 
 #endif

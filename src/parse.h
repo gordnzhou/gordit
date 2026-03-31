@@ -12,5 +12,6 @@ int run_status(const arglist_status_t *);
 int run_branch(const arglist_branch_t *);
 int run_checkout(const arglist_checkout_t *);
 int run_diff(const arglist_diff_t *);
+int run_config(const arglist_config_t *);
 
 #endif

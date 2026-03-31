@@ -78,4 +78,7 @@ void fs_path_join(const char *path1, const char *path2, char *out);
 // @return 1 if path exists, 0 otherwise
 int fs_file_exists(const char *);
 
+// @return OS user's home directory path or NULL if not found.
+const char *fs_user_homepath();
+
 #endif

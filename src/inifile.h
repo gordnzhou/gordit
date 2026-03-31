@@ -3,32 +3,41 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-
-#if 0
-typedef struct {
-    const char *section;
-    const char *key;
-    const char *value;
-} inifile_kvpair;
+#include <utils.h>
 
 typedef struct {
-    FILE *fptr;
-    inifile_kvpair *kvpairs;
-    size_t lines;
+    char *key;
+    char *value;
+} inifile_item;
+
+DEFINE_DARRAY(inif_items_arr, inifile_item)
+
+typedef struct {
+    inif_items_arr_t *items;
+    char *name; 
+} inifile_section;
+
+DEFINE_DARRAY(inif_sections_arr, inifile_section)
+
+typedef struct {
+    inif_sections_arr_t *sections; 
+    size_t items_size;
 } inifile;
 
-inifile *inifile_open(const char *path);
+inifile *inifile_read(const char *path);
 
-int inifile_parse(inifile *inifile);
+void inifile_print(inifile *inif);
 
-int inifile_write(, const char *key, const char *value);
+int inifile_update(inifile *inif, const char *section, const char *key, const char *value);
 
-int inifile_read_str(char *value, const char *path, const char *section, const char *key);
+// @return 1 if item existed, 0 otherwise
+int inifile_delete_item(inifile *inif, const char *section, const char *key);
 
-int inifile_read_int(int *value, const char *path, const char *section, const char *key);
+const char *inifile_get_str(inifile *inif, const char *section, const char *key);
+int  inifile_get_int(inifile *inif,  int *value, const char *section, const char *key);
+int inifile_get_bool(inifile *inif,  int *value, const char *section, const char *key);
 
+void inifile_write(inifile *inif, const char *path);
 
-void inifile_close(inifile *);
-#endif
-
+void inifile_free(inifile *inif);
 #endif

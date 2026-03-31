@@ -99,25 +99,22 @@ char *indirect_ref_str(const char *ref_path) {
     return ret;
 }
 
-void move_head(const git_repo *repo, git_ref *ref) {
-    char *contents = NULL;
-
-    if (ref->type == DIRECT) {
-        contents = ref->hash;
-    } else { 
+void move_head(const git_repo *repo, const git_ref *ref) {
+    char *indir_str = NULL;
+    if (ref->type != DIRECT) {
         char *ref_path = ref_full_path(repo, ref->type, ref->name);
 
         // parses into: "ref: refs/<type>/<name>""
         int git_folder_len = strlen(repo->git_path);
         assert(memcmp(ref_path, repo->git_path, git_folder_len) == 0);
-        contents = indirect_ref_str(ref_path + git_folder_len + 1);
+        indir_str = indirect_ref_str(ref_path + git_folder_len + 1);
         free(ref_path);
     }
 
     FILE *fptr = sfopen(repo->head_path, "w");
-    sfputs(contents, fptr, repo->head_path);
+    sfputs(indir_str ? indir_str : ref->hash, fptr, repo->head_path);
     fclose(fptr);
-    free(contents);
+    if (indir_str) free(indir_str);
 }
 
 #define HEAD_BUF_SIZE 256

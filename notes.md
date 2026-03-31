@@ -177,5 +177,3 @@ def456 branch 'develop' of origin
 - `git pull` = fetch + merge. if on tracking branch, fetches only from upstream branch (usually origin/main), which updates FETCH_HEAD and merges commit in FETCH_HEAD into current branch. Otherwise, need to specify remote and branch to pull from.
 - `git push` if on tracking branch, finds local commits that exist in local but not in remote upstream branch, sends them and updates remote repo. Otherwise need to specify remote and branch to push to (`-u` sets local branch's upstream to that remote in .git\config.ini). 
 - `git remote add/rename/remove` 
-
-sex

@@ -18,9 +18,9 @@ const char *cmd_optstring(const char *command) {
     #define Y(opt_type, char, name, desc, usage) \
         #char opt_type##_GETOPT_TOK
 
-    #define X(name, options, has_ps, desc) \
-        if (strcmp(#name, command) == 0) { \
-            return ":" options "h";        \
+    #define X(name, options, has_pargs, desc, p) \
+        if (strcmp(#name, command) == 0) {       \
+            return ":" options "h";              \
         }
     GIT_ARGS
     #undef X
@@ -33,7 +33,7 @@ void print_helpstring(const char *command) {
     #define Y(o, char, n, desc, u) \
         printf("  -%-3s %-40s\n", #char , desc);
 
-    #define X(name, options, has_ps, desc)                       \
+    #define X(name, options, has_ps, desc, parg_name)            \
         if (strcmp(#name, command) == 0) {                       \
             colour_print(COLOUR_BOLD, "%s options:\n", #name);   \
             options                                              \
@@ -47,13 +47,13 @@ void print_helpstring(const char *command) {
 }
 
 const char *cmd_usagestring(const char *command) {
-    #define PATHSPEC_USAGE_0 
-    #define PATHSPEC_USAGE_1 "<pathspec>... "
+    #define PARGS_USAGE_0(name) ""
+    #define PARGS_USAGE_1(name) name ""
 
     #define Y(o, c, n, d, usage) usage " "
-    #define X(name, options, has_ps, desc)               \
-        if (strcmp(#name, command) == 0) {               \
-            return options PATHSPEC_USAGE_##has_ps "";   \
+    #define X(name, options, has_pargs, desc, parg_name)          \
+        if (strcmp(#name, command) == 0) {                        \
+            return options PARGS_USAGE_##has_pargs (parg_name);   \
         }
     GIT_ARGS
     #undef X
@@ -69,7 +69,7 @@ void cmd_usage_print(const char *program, const char *command) {
 
 void default_help_print(const char *program) {
     printf("usage: %s <command> [-h] [<args>]\n\nAll Commands:\n", program);
-    #define X(name, options, has_ps, desc) printf("  %-15s %-40s\n", #name , desc);    
+    #define X(name, options, has_pargs, desc, p) printf("  %-15s %-40s\n", #name , desc);    
     GIT_ARGS
     #undef X
     printf("\n");
@@ -116,20 +116,20 @@ int command_main(int argc, char *const argv[]) {
     #define CHAR_y 'y'
     #define CHAR_z 'z'
 
-    #define PATHSPEC_PARSE_0
-    #define PATHSPEC_PARSE_1                         \
+    #define PARGS_PARSE_0
+    #define PARGS_PARSE_1                            \
         for (int i = optind; i < argc; i++) {        \
-            if (arglist.ps_size >= 100) {            \
+            if (arglist.size_pargs >= 100) {         \
                 fatal("too many arguments");         \
             }                                        \
-            arglist.ps_size++;                       \
-            arglist.pathspecs[i-optind] = argv[i]; \
+            arglist.size_pargs++;                    \
+            arglist.pargs[i-optind] = argv[i];       \
         }
 
     #define Y(opt_type, char, name, desc, usage) \
         case CHAR_##char: opt_type##_ASSIGN(name); break;
 
-    #define X(name, options, has_ps, desc)                                      \
+    #define X(name, options, has_pargs, desc, parg_name)                        \
     if (strcmp(#name, command) == 0) {                                          \
         assert(cmd_found == 0); cmd_found = 1;                                  \
         ARGLIST_STRUCT(name) arglist = { 0 };                                   \
@@ -152,7 +152,7 @@ int command_main(int argc, char *const argv[]) {
                     abort();                                                    \
             }                                                                   \
         }                                                                       \
-        PATHSPEC_PARSE_ ##has_ps                                                \
+        PARGS_PARSE_ ##has_pargs                                                \
         if (show_help) {                                                        \
             cmd_usage_print(program, command);                                  \
         } else {                                                                \

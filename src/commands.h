@@ -14,7 +14,11 @@ int cmd_commit_index(const git_repo *repo, git_dircache *dircache,
 
 int cmd_add_file(const git_repo *repo, git_dircache *dircache, const char *git_path_name);
 
-int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const char *git_path_name);
+int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, 
+    const char *git_path_name, 
+    int staged_only, 
+    int force
+);
 
 int cmd_diff_repo_index(const git_repo *repo, git_dircache *dircache);
 

@@ -4,7 +4,7 @@
 #include "repo.h"
 #include "utils.h"
 
-#define START_BRANCH "main"
+#define START_BRANCH_DEFAULT "main"
 #define INDIRECT_REF_HEADER "ref: "
 
 enum ref_type {
@@ -34,7 +34,7 @@ int is_head_detached(git_ref *head_ref);
 
 // updates contents of HEAD file to point to ref. If type is DIRECT (no name), 
 // HEAD's content is replaced with the ref hash, leaving HEAD in detached state
-void move_head(const git_repo *repo, git_ref *ref);
+void move_head(const git_repo *repo, const git_ref *ref);
 
 // reads contents of HEAD file. make sure to handle case where HEAD has no hash 
 // AND if HEAD is detached (if current branch information is needed)

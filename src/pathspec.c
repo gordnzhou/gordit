@@ -98,14 +98,22 @@ git_file_list *git_fl_init() {
     return list;
 }
 
+// TODO: could convert to hash map
+int git_fl_find(const git_file_list *list, const char *name) {
+    for (int i = 0; i < list->size; i++) {
+        if (strcmp(name, list->items[i]->name) == 0) {
+           return 1;
+        }
+    }
+
+    return 0;
+}
+
 void git_fl_add(git_file_list *list, const char *name) {
     list->changed = 1; 
 
-    // TODO: could convert to hash map
-    for (int i = 0; i < list->size; i++) {
-        if (strcmp(name, list->items[i]->name) == 0) {
-           return;
-        }
+    if (git_fl_find(list, name)) {
+        return;
     }
 
     git_file_item *item = smalloc(sizeof(*item));
@@ -246,9 +254,9 @@ int is_ignored(const git_repo *repo, const char *name) {
     return 0;
 }
 
-void git_fl_add_wt(const git_repo *repo, git_file_list *list, const char *path, int tracked_only) {
+void git_fl_add_wt(const git_repo *repo, git_file_list *list, const char *path, int check_ignores) {
     char *name = path_git_name(repo, path);  
-    if (tracked_only && is_ignored(repo, name)) {
+    if (check_ignores && is_ignored(repo, name)) {
         free(name);
         return;
     }
@@ -259,7 +267,7 @@ void git_fl_add_wt(const git_repo *repo, git_file_list *list, const char *path, 
 
 void working_tree_walk(git_file_list *out, const git_repo *repo, const char *folder,  
     const pathspec_item *pathspec, int cur_depth, int wild_recurse,
-    int tracked_only
+    int check_ignores
 ) { 
     int found = cur_depth == pathspec->nparts;
 
@@ -281,10 +289,10 @@ void working_tree_walk(git_file_list *out, const git_repo *repo, const char *fol
             }
             if (S_ISREG(st.st_mode)) {
                 if (cur_depth == pathspec->nparts - 1) {
-                    git_fl_add_wt(repo, out, target, tracked_only);
+                    git_fl_add_wt(repo, out, target, check_ignores);
                 }
             } else if (S_ISDIR(st.st_mode)) {
-                working_tree_walk(out, repo, target, pathspec, cur_depth + 1, 0, tracked_only);
+                working_tree_walk(out, repo, target, pathspec, cur_depth + 1, 0, check_ignores);
             }
             return;
         }
@@ -304,22 +312,22 @@ void working_tree_walk(git_file_list *out, const git_repo *repo, const char *fol
         char *subfolder = sstrdup(ent.de_path);
         if (found) {
             if (ent.de_type == FS_ISFILE) {
-                git_fl_add_wt(repo, out, ent.de_path, tracked_only);
+                git_fl_add_wt(repo, out, ent.de_path, check_ignores);
             } else if (ent.de_type == FS_ISDIR) {
-                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 0, tracked_only);
+                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 0, check_ignores);
             }
             continue;
         } else {
             if (pathspec_slice_matches(pathspec->parts + cur_depth, ent.de_name)) {
                 if (ent.de_type == FS_ISFILE) {
                     if (cur_depth == pathspec->nparts - 1) {
-                        git_fl_add_wt(repo, out, ent.de_path, tracked_only);
+                        git_fl_add_wt(repo, out, ent.de_path, check_ignores);
                     }
                 } else if (ent.de_type == FS_ISDIR) {
-                    working_tree_walk(out, repo, subfolder, pathspec, cur_depth + 1, 0, tracked_only);
+                    working_tree_walk(out, repo, subfolder, pathspec, cur_depth + 1, 0, check_ignores);
                 }
             } else if (wild_recurse && ent.de_type == FS_ISDIR) {
-                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 1, tracked_only);
+                working_tree_walk(out, repo, subfolder, pathspec, cur_depth, 1, check_ignores);
             }
         }
        free(subfolder);
@@ -327,9 +335,9 @@ void working_tree_walk(git_file_list *out, const git_repo *repo, const char *fol
     closedir(dir);
 }
 
-int git_fl_working_tree_files(git_file_list *out, const git_repo *repo, const pathspec_item *pathspec, int tracked_only) {
+int git_fl_working_tree_files(git_file_list *out, const git_repo *repo, const pathspec_item *pathspec, int check_ignores) {
     out->changed = 0;
-    working_tree_walk(out, repo, repo->root_path, pathspec, 0, 0, tracked_only);
+    working_tree_walk(out, repo, repo->root_path, pathspec, 0, 0, check_ignores);
     return out->changed; 
 }
 
@@ -397,11 +405,11 @@ int git_fl_dircache_files(git_file_list *out, const git_dircache *dircache, cons
 }
 
 
-strarr_t *repo_all_files(const git_repo *repo, int tracked_only) {
+strarr_t *working_tree_all_files(const git_repo *repo, int check_ignores) {
     strarr_t *out = strarr_new();
     git_file_list *files = git_fl_init();
     pathspec_item *ps = pathspec_parse(repo, repo->root_path, ".");
-    git_fl_working_tree_files(files, repo, ps, tracked_only);
+    git_fl_working_tree_files(files, repo, ps, check_ignores);
     pathspec_free(ps);
     for (int i = 0 ; i < files->size; i++) {
         strarr_push(out, files->items[i]->name);

@@ -7,7 +7,7 @@
 #include "utils.h"
 #include "logging.h"
 
-void free_commit(git_obj_commit *commit) {
+void commit_free(git_obj_commit *commit) {
     free(commit->parents);
     free(commit->author_name);
     free(commit->author_email);
@@ -15,7 +15,7 @@ void free_commit(git_obj_commit *commit) {
     free(commit);
 }
 
-git_obj_commit *create_commit(git_obj_tree *tree, 
+git_obj_commit *commit_new(git_obj_tree *tree, 
     int num_parents, 
     obj_hash *parents, 
     const char *author_name, 
@@ -137,13 +137,13 @@ git_obj *create_commit_obj(const git_obj_commit *commit) {
     return obj;
 }
 
-void print_commit(const git_obj_commit *commit) { 
+void commit_print(const git_obj_commit *commit) { 
     printf("Author: %s <%s>\n", commit->author_name, commit->author_email);
     printf("Date:   %s\n", ctime(&(commit->timestamp)));
     printf("    %s\n", commit->msg);
 }
 
-git_obj_commit *read_commit_from_disk(const git_repo *repo, const obj_hash hash) { 
+git_obj_commit *commit_read(const git_repo *repo, const obj_hash hash) { 
     git_obj *obj = smalloc(sizeof(*obj));
     read_obj_from_disk(obj, repo, hash, OBJ_TYPE_COMMIT);
 
@@ -157,4 +157,22 @@ git_obj_commit *read_commit_from_disk(const git_repo *repo, const obj_hash hash)
     free(contents);
     free_obj(obj);
     return commit;
+}
+
+int commit_find_parent(const git_repo *repo, const obj_hash root_commit, const obj_hash target_commit) {
+    if (hash_eq(root_commit, target_commit)) {
+        return 1;
+    }
+
+    int found = 0;
+    git_obj_commit *commit = commit_read(repo, root_commit);
+    for (int i = 0; i < commit->num_parents; i++) {
+        if (commit_find_parent(repo, commit->parents[i], target_commit)) {
+            found = 1;
+            break;
+        }
+    }
+    commit_free(commit);
+
+    return found;
 }

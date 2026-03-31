@@ -212,3 +212,26 @@ void fs_path_basename(const char* path, char *out) {
     return;
 }
 #endif
+
+const char *fs_user_homepath() {
+#ifdef _WIN32
+    const char *home = getenv("USERPROFILE");
+    if (home) return home;
+
+    const char *drive = getenv("HOMEDRIVE");
+    const char *path  = getenv("HOMEPATH");
+    if (drive && path) {
+        static char full[512];
+        snprintf(full, sizeof(full), "%s%s", drive, path);
+        return full;
+    }
+    return NULL;
+#else
+    const char *home = getenv("HOME");
+    if (home) return home;
+
+    #include <pwd.h>
+    struct passwd *pw = getpwuid(getuid());
+    return pw ? pw->pw_dir : NULL;
+#endif
+}

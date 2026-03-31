@@ -58,7 +58,7 @@ void test_repo_setup(const char *path) {
     }
     char full_path[PATH_MAX];
     assert(fs_path_abs(path, full_path) != -1);
-    create_repo_folder(full_path);
+    repo_folder_initialize(full_path);
 
     mkdir_rel(full_path, "src");
     mkdir_rel(full_path, "src/utils");
@@ -226,13 +226,13 @@ void test_objects(const git_repo *repo) {
     git_obj *commit_obj;
     obj_hash *commit_hash;
 
-    commit = create_commit(tree, 1, &(blob->hash), "Gordon Zhou", "gordonzhou223@gmail.com", "hello world");
+    commit = commit_new(tree, 1, &(blob->hash), "Gordon Zhou", "gordonzhou223@gmail.com", "hello world");
 
     commit_obj = create_commit_obj(commit);
     commit_hash = &(commit_obj->hash);
     write_obj_to_disk(repo, commit_obj);
 
-    commit2 = read_commit_from_disk(repo, *commit_hash);
+    commit2 = commit_read(repo, *commit_hash);
     assert_str_equals(commit2->tree_hash, commit->tree_hash);
     assert_str_equals(commit2->msg, commit->msg);
     assert_str_equals(commit2->author_name, commit->author_name);
@@ -241,11 +241,11 @@ void test_objects(const git_repo *repo) {
     assert_str_equals(commit2->parents[0], commit->parents[0]);
     assert(commit2->timestamp == commit->timestamp);
 
-    print_commit(commit2);
+    commit_print(commit2);
     printf("================COMMIT TESTS PASSED=============\n");
     
-    free_commit(commit);
-    free_commit(commit2);
+    commit_free(commit);
+    commit_free(commit2);
     free_obj(blob);
     free_obj(blob2);
     free_tree(tree);

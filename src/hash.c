@@ -15,6 +15,10 @@ void string_to_hash(obj_hash *out, const char *in) {
     copy_hash(out, (obj_hash *)in);
 }
 
+int hash_eq(const obj_hash a, const obj_hash b) {
+    return strcmp(a, b) == 0;
+}
+
 void hash_from_bytes(const unsigned char *bytes, obj_hash *out_hash) {
     for (int i = 0; i < SHA_DIGEST_LENGTH; i++) {
         snprintf(*out_hash + (i << 1), OBJ_HASH_SIZE, "%02x", bytes[i]);

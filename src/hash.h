@@ -10,6 +10,8 @@ void hash_to_bytes(const obj_hash hash, unsigned char *out_bytes);
 
 void copy_hash(obj_hash *out, const obj_hash* in);
 
+int hash_eq(const obj_hash a, const obj_hash b);
+
 void string_to_hash(obj_hash *out, const char *in);
 
 // uses SHA1 function from openssl/sha.h

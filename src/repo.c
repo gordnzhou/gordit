@@ -12,6 +12,7 @@
 #include "refs.h"
 #include "dircache.h"
 #include "commit.h"
+#include "inifile.h"
 
 // NOTE: only supports files and folders. symlinks and gitlinks just return 0.
 unsigned int stat_mode_to_git(unsigned int st_mode) {
@@ -70,18 +71,12 @@ const git_repo *git_repo_init() {
     return repo;
 }
 
-int create_repo_folder(char *repo_root) {
+int repo_folder_initialize(char *repo_root, char *start_branch, int bare) {
     git_path_clean(repo_root);
     git_repo *repo = smalloc(sizeof *repo);
     init_repo_context(repo, repo_root);
 
     int exists = fs_file_exists(repo->head_path);
-
-    if (exists) {
-        // TODO: reinitalize repo
-        free(repo);
-        return exists;
-    }
 
     mode_t mode = 0700;
     if (fs_mkdir(repo->git_path, mode) == -1 ||
@@ -92,10 +87,20 @@ int create_repo_folder(char *repo_root) {
         fatal("could not initialize repository: %s", strerror(errno));
     }
 
-    git_ref start_ref = { 0 };
-    start_ref.type = REF_LOCAL;
-    start_ref.name = START_BRANCH;
-    move_head(repo, &start_ref);
+    inifile *config = inifile_read(repo->config_path);
+    if (config->items_size == 0) {
+        inifile_update(config, "core", "bare", bare ? "true" : "false");
+        inifile_write(config, repo->config_path);
+    }
+    inifile_free(config);
+
+    if (!exists) {
+        git_ref start_ref = { 
+            .type = REF_LOCAL,
+            .name = start_branch ? start_branch : START_BRANCH_DEFAULT,
+        };
+        move_head(repo, &start_ref);
+    }
 
     free(repo);
    
@@ -174,4 +179,16 @@ void git_path_clean(char *path) {
             path[i] = tolower(path[i]);
         }
     }
+}
+
+const char *git_global_config_path() {
+    static char path[PATH_MAX];
+    const char *home_path = fs_user_homepath();
+    if (!home_path) {
+        fatal("could not get home directory");
+    }
+
+    fs_path_join(home_path, GLOBAL_CONFIG_NAME, path);
+
+    return path;
 }

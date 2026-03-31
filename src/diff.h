@@ -4,6 +4,7 @@
 #include "tree.h"
 #include "dircache.h"
 #include "utils.h"
+#include "pathspec.h"
 
 enum diff_type {
     MODIFIED,
@@ -33,11 +34,11 @@ void diff_free(git_diff *diff);
 void diff_trees(git_diff *out, const git_obj_tree *new, int new_size, const git_obj_tree *old, int old_size);
 
 // index is NEW and tree is OLD
-void diff_index_tree(git_diff *out, const git_dircache *dircache, const git_obj_tree *tree, int tree_size);
+void diff_index_tree(git_diff *out, const git_dircache *dircache, const git_obj_tree *tree, int tree_size, const git_file_list *filter);
 
 // modified and added entries do not have their new hashes saved
 // repo is NEW and dircache is OLD
-void diff_repo_index(git_diff *out, const git_repo *repo, const strarr_t *repo_files, const git_dircache *dircache);
+void diff_repo_index(git_diff *out, const git_repo *repo, const strarr_t *repo_files, const git_dircache *dircache, const git_file_list *filter);
 
 // @return 0 if no change, 1 if modified, -1 if deleted
 int diff_file_repo_index(const git_repo *repo, const git_index_entry *entry);
@@ -46,9 +47,10 @@ int is_file_changed_unstaged(const git_index_entry *entry, const fileinfo *info)
 
 // checks index entries in repo
 // repo is NEW and dircache is OLD
-void diff_repo_index_tracked(git_diff *out, const git_repo *repo, const git_dircache *dircache);
+void diff_repo_index_tracked(git_diff *out, const git_repo *repo, const git_dircache *dircache, const git_file_list *filter);
 
 // checks for new files (files in working tree but not in index).
 // repo is NEW and dircache is OLD
-void diff_repo_index_untracked(git_diff *out, const strarr_t *repo_files, const git_dircache *dircache);
+void diff_repo_index_untracked(git_diff *out, const strarr_t *repo_files, const git_dircache *dircache, const git_file_list *filter);
+
 #endif

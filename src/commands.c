@@ -38,31 +38,39 @@ int cmd_add_file(const git_repo *repo, git_dircache *dircache, const char *git_p
     return 0;
 }
 
-// TODO: option to remove only from index, "force" option to ignore checks
-int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, const char *git_path_name) {
+int cmd_rm_file(const git_repo *repo, git_dircache *dircache, const git_obj_tree *head_tree, 
+    const char *git_path_name, int staged_only, int force
+) {
     git_index_entry **in_index = dircache_find_file(dircache, git_path_name);
     if (!in_index) {
         return 0;
     }
 
-    fileinfo *info = start_fileinfo(repo, git_path_name, "rb");
     git_index_entry *entry = *in_index;
-    if (is_file_changed_unstaged(entry, info)) {
-        fatal("cannot remove '%s' as it has unstaged changes", git_path_name);
-    }
+    fileinfo *info = start_fileinfo(repo, git_path_name, "rb");
+    
+    if (!force) {
+        if (head_tree != NULL) {
+            git_tree_entry **found = tree_find_blob(head_tree, git_path_name);
+            if (found != NULL && !hash_eq(entry->hash, (*found)->u.blob_hash)) {
+                fatal("cannot remove '%s' as it has uncommited changes", git_path_name);
+            }
+        }
 
-    if (head_tree != NULL) {
-        git_tree_entry **found = tree_find_blob(head_tree, git_path_name);
-        if (found != NULL && strcmp(entry->hash, (*found)->u.blob_hash) != 0) {
-            fatal("cannot remove '%s' as it has uncommited changes", git_path_name);
+        if (is_file_changed_unstaged(entry, info)) {
+            fatal("cannot remove '%s' as it has unstaged changes", git_path_name);
         }
     }
-
+    
     if (dircache_remove(dircache, info->norm_path) != 0) {
         DEBUG_PRINT("removing '%s' from index but it is not in dircache", info->abs_path); 
     }
 
-    sremove(info->abs_path);
+    if (!staged_only) {
+        sremove(info->abs_path);
+    }
+
+    end_fileinfo(info);
 
     return 0;
 }
@@ -86,23 +94,23 @@ int cmd_commit_index(const git_repo *repo, git_dircache *dircache,
 
     // TODO: read MERGE_HEAD for possibly 1+ other commit parents
     if (!head_ref->empty_hash) {
-        git_obj_commit *parent_commit = read_commit_from_disk(repo, head_ref->hash);
+        git_obj_commit *parent_commit = commit_read(repo, head_ref->hash);
         git_obj_tree *parent_tree = read_tree_from_disk(repo, parent_commit->tree_hash);
         if (is_tree_and_dc_same(dircache, parent_tree)) {
             free_ref(head_ref);
             free_tree(parent_tree);
-            free_commit(parent_commit);
+            commit_free(parent_commit);
             return info("nothing new for me to commit!");
         }
 
         free_tree(parent_tree);
-        free_commit(parent_commit);
+        commit_free(parent_commit);
     }
 
     int num_parents = head_ref->empty_hash ? 0 : 1;
     obj_hash *parents = head_ref->empty_hash ? NULL : &(head_ref->hash); 
 
-    git_obj_commit *commit = create_commit(tree, num_parents, parents, author_name, author_email, msg);
+    git_obj_commit *commit = commit_new(tree, num_parents, parents, author_name, author_email, msg);
     git_obj *commit_obj = create_commit_obj(commit);
     obj_hash *commit_hash = &(commit_obj->hash);
 
@@ -110,7 +118,7 @@ int cmd_commit_index(const git_repo *repo, git_dircache *dircache,
     write_tree_to_disk(repo, tree, 1);
     // print_tree(tree);
 
-    print_commit(commit);
+    commit_print(commit);
 
     if (head_ref->type == DIRECT) {
         copy_hash(&(head_ref->hash), commit_hash);
@@ -136,7 +144,7 @@ int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, g
     }
 
     git_dircache *dircache = create_dircache(repo);
-    git_obj_commit *head_commit = head_ref->empty_hash ? NULL : read_commit_from_disk(repo, head_ref->hash);
+    git_obj_commit *head_commit = head_ref->empty_hash ? NULL : commit_read(repo, head_ref->hash);
     git_obj_tree *head_tree = head_commit ? read_tree_from_disk(repo, head_commit->tree_hash) : NULL;
 
     int head_size = tree_num_blobs(head_tree);
@@ -149,7 +157,7 @@ int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, g
         git_index_entry **in_index = dircache_find_file(dircache, entry->name);
         if (in_index) {
             git_index_entry *index_entry = *in_index;
-            if (entry->type == MODIFIED && strcmp(*(entry->new_hash), index_entry->hash) != 0 && strcmp(*(entry->old_hash), index_entry->hash) != 0) {
+            if (entry->type == MODIFIED && !hash_eq(*(entry->new_hash), index_entry->hash)) {
                 fatal("cannot checkout: '%s' still has uncommitted changes!", entry->name);
             }
             if (diff_file_repo_index(repo, index_entry) == 1) {
@@ -188,7 +196,7 @@ int cmd_checkout_branch(const git_repo *repo, const git_obj_tree *target_tree, g
 
     free_dircache(dircache);
     free_ref(head_ref);
-    if (head_commit) free_commit(head_commit);
+    if (head_commit) commit_free(head_commit);
     if (head_tree) free_tree(head_tree);
 
     return 0;
@@ -218,9 +226,9 @@ int cmd_restore_file(const git_repo *repo, const git_obj_tree *target_tree, cons
 }
 
 int cmd_diff_repo_index(const git_repo *repo, git_dircache *dircache) {
-    strarr_t *files_all = repo_all_files(repo, 1);
+    strarr_t *files_all = working_tree_all_files(repo, 1);
     git_diff *diff = diff_new(dircache->num_entries + files_all->len);
-    diff_repo_index(diff, repo, files_all, dircache);
+    diff_repo_index(diff, repo, files_all, dircache, NULL);
 
     for (int i = 0; i < diff->size; i++) {
         diff_entry *entry = diff->entries + i;
@@ -285,15 +293,33 @@ int cmd_branch_delete(const git_repo *repo, const git_ref *head_ref, const char 
     if (strcmp(head_ref->name, branch_name) == 0) {
         fatal("cannot remove current branch HEAD is pointing to!");
     }
-    if (!ref_exists(repo, REF_LOCAL, branch_name)) {
-        return error("no branch named '%s' to remove", branch_name);
+
+    git_ref *target_ref = read_ref(repo, REF_LOCAL, branch_name, 1);
+
+    int reachable = target_ref->empty_hash;
+    if (!target_ref->empty_hash) {
+
+        strarr_t *refs = refs_all_names(repo, REF_LOCAL);
+        for (size_t i = 0; i < refs->len; i++) {
+            git_ref *ref = read_ref(repo, REF_LOCAL, refs->data[i], 0);
+            reachable = !ref->empty_hash && commit_find_parent(repo, ref->hash, target_ref->hash);
+            free_ref(ref);
+            if (reachable) {
+                break;
+            }
+        }
+        strarr_free(refs);
+    }   
+
+    if (!reachable) {
+        fatal("cannot delete '%s' as it points to commit(s) unreachable from other branches", branch_name);
     }
 
-    // TODO: check that branch's tip commit is reachable from other branches
-
     del_ref(repo, REF_LOCAL, branch_name);
-
     printf("removed branch '%s'\n", branch_name);
+
+    free_ref(target_ref);
+
     return 0;
 }
 

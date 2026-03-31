@@ -1,6 +1,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "utils.h"
 #include "logging.h"
@@ -66,7 +67,7 @@ DIR *sopendir(const char *folderpath) {
 void freadb_full(void *dest, size_t filesize, FILE *file, const char *name) {
     size_t read = fread(dest, 1, filesize, file);
     if (read != filesize) {
-        fatal("could not fully read to '%s'", name);
+        fatal("could not fully read from '%s'", name);
     }
 }
 
@@ -92,8 +93,9 @@ char *sfgets(char *buf, size_t buf_len, FILE *file, const char *name, int strict
         fatal("could not read string from '%s': %s", name, strerror(errno));
     }
     
-    if (strict_bufsize && strlen(buf) != buf_len - 1) {
-        fatal("could not fully read string from '%s'", name);
+    size_t len = strlen(buf);
+    if (strict_bufsize && len != buf_len - 1) {
+        fatal("could not fully read contents of '%s' (read %llu but expected %llu bytes)", name, len, buf_len - 1);
     }
 
     return ret;
@@ -153,4 +155,15 @@ void strarr_free(strarr_t *arr) {
         free(arr->data[i]);
     }
     free(arr);
+}
+
+int strcicmp(const char *str1, const char *str2) {
+    while (*str1 && *str2) {
+        if (tolower((unsigned char)*str1) != tolower((unsigned char)*str2)) {
+            return tolower((unsigned char)*str1) - tolower((unsigned char)*str2);
+        }
+        str1++;
+        str2++;
+    }
+    return tolower((unsigned char)*str1) - tolower((unsigned char)*str2);
 }
